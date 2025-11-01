@@ -1,11 +1,12 @@
 import AuthFlow from "@/components/auth/AuthFlow";
 
 type AuthPageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default function AuthPage({ searchParams }: AuthPageProps) {
-  const redirectParam = searchParams?.redirectTo;
+export default async function AuthPage({ searchParams }: AuthPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const redirectParam = resolvedSearchParams?.redirectTo;
   const redirectTo =
     typeof redirectParam === "string" && redirectParam.startsWith("/")
       ? redirectParam

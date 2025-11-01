@@ -2,9 +2,11 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 const AUTH_PATH = "/auth";
+const PUBLIC_PATHS = new Set<string>([AUTH_PATH, "/reset-password"]);
 
 function isPublicPath(pathname: string) {
-  if (pathname === AUTH_PATH) return true;
+  if (PUBLIC_PATHS.has(pathname)) return true;
+  if (pathname.startsWith("/reset-password")) return true;
   if (pathname.startsWith("/api")) return true;
   if (pathname.startsWith("/_next")) return true;
   if (pathname.startsWith("/favicon")) return true;

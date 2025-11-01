@@ -7,6 +7,11 @@ import EmailStep from "@/components/auth/steps/EmailStep";
 import PasswordStep from "@/components/auth/steps/PasswordStep";
 import SignupStep from "@/components/auth/steps/SignupStep";
 import { setAuthToken } from "@/lib/auth-client";
+import {
+  evaluatePassword,
+  isPasswordStrong,
+  MIN_PASSWORD_LENGTH,
+} from "@/lib/password";
 
 type AuthStatus =
   | "idle"
@@ -221,7 +226,10 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
   const router = useRouter();
 
   const isEmailValid = emailRegex.test(state.email.trim());
-  const isPasswordValid = state.password.trim().length >= 8;
+  const trimmedPassword = state.password.trim();
+  const passwordChecks = evaluatePassword(trimmedPassword);
+  const passwordIsStrong = isPasswordStrong(trimmedPassword);
+  const canSubmitPasswordStep = trimmedPassword.length >= MIN_PASSWORD_LENGTH;
   const hasName = state.name.trim().length >= 2;
 
   const handleEmailSubmit = async () => {
@@ -271,11 +279,11 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
   };
 
   const handlePasswordSubmit = async () => {
-    if (!isPasswordValid) {
+    if (!canSubmitPasswordStep) {
       dispatch({
         type: "setErrors",
         errors: {
-          password: "Use at least 8 characters.",
+          password: "Enter at least 8 characters.",
         },
       });
       return;
@@ -324,8 +332,8 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
       nextErrors.name = "Tell us your name.";
     }
 
-    if (!isPasswordValid) {
-      nextErrors.password = "Use at least 8 characters.";
+    if (!passwordIsStrong) {
+      nextErrors.password = "Please meet all password requirements.";
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -380,7 +388,15 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
   };
 
   const handleForgotPassword = () => {
-    console.log("Forgot password for", state.email);
+    const emailParam = state.email.trim();
+    const params = new URLSearchParams();
+
+    if (emailParam.length > 0) {
+      params.set("email", emailParam);
+    }
+
+    const query = params.toString();
+    router.push(`/reset-password${query ? `?${query}` : ""}`);
   };
 
   const handleContinueWithGoogle = () => {
@@ -421,18 +437,18 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
         <PasswordStep
           email={state.email}
           password={state.password}
-          onPasswordChange={(value) =>
-            dispatch({ type: "updatePassword", password: value })
-          }
-          onSubmit={handlePasswordSubmit}
-          error={state.errors.password}
-          isLoading={isSubmitting}
-          canSubmit={isPasswordValid}
-          onForgotPassword={handleForgotPassword}
-          onContinueWithGoogle={handleContinueWithGoogle}
-          isGoogleLoading={isGoogleLoading}
-        />
-      );
+        onPasswordChange={(value) =>
+          dispatch({ type: "updatePassword", password: value })
+        }
+        onSubmit={handlePasswordSubmit}
+        error={state.errors.password}
+        isLoading={isSubmitting}
+        canSubmit={canSubmitPasswordStep}
+        onForgotPassword={handleForgotPassword}
+        onContinueWithGoogle={handleContinueWithGoogle}
+        isGoogleLoading={isGoogleLoading}
+      />
+    );
     }
 
     return (
@@ -445,12 +461,13 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
           dispatch({ type: "updatePassword", password: value })
         }
         onSubmit={handleSignupSubmit}
+        passwordChecks={passwordChecks}
         errors={{
           name: state.errors.name,
           password: state.errors.password,
         }}
         isLoading={isSubmitting}
-        canSubmit={hasName && isPasswordValid}
+        canSubmit={hasName && passwordIsStrong}
         onContinueWithGoogle={handleContinueWithGoogle}
         isGoogleLoading={isGoogleLoading}
       />

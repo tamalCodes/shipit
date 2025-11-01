@@ -66,7 +66,7 @@ export default function PasswordStep({
           <button
             type="button"
             onClick={onForgotPassword}
-            className="text-xs font-medium text-zinc-500 underline underline-offset-2 transition hover:text-zinc-900"
+            className="cursor-pointer text-xs font-medium text-zinc-500 underline underline-offset-2 transition hover:text-zinc-900"
           >
             Forgot password?
           </button>
