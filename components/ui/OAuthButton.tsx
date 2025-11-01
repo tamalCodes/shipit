@@ -52,7 +52,9 @@ const OAuthButton = forwardRef<HTMLButtonElement, OAuthButtonProps>(
       variant="outline"
       size="md"
       disabled={disabled || isLoading}
-      className={`h-12 w-full gap-3 rounded-2xl ${className ?? ""}`}
+      className={`h-12 cursor-pointer disabled:cursor-not-allowed w-full gap-3 rounded-2xl ${
+        className ?? ""
+      }`}
       {...props}
     >
       {provider === "google" ? googleIcon : null}

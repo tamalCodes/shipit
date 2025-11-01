@@ -38,12 +38,10 @@ export default function EmailStep({
   return (
     <div className="space-y-10">
       <header className="space-y-2 text-left">
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-950">
-          Sign in
+        <h1 className="font-display text-3xl font-semibold tracking-tight text-zinc-950">
+          Welcome
         </h1>
-        <p className="text-sm text-zinc-500">
-          Use Google or your email.
-        </p>
+        <p className="text-sm text-zinc-500">Use Google or your email.</p>
       </header>
 
       <form className="space-y-6" onSubmit={handleSubmit}>

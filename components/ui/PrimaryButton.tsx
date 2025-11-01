@@ -12,7 +12,14 @@ type PrimaryButtonProps = ButtonProps & {
 
 const PrimaryButton = forwardRef<HTMLButtonElement, PrimaryButtonProps>(
   (
-    { children, className, isLoading = false, loadingText = "Loading...", disabled, ...props },
+    {
+      children,
+      className,
+      isLoading = false,
+      loadingText = "Loading...",
+      disabled,
+      ...props
+    },
     ref
   ) => (
     <Button
@@ -20,7 +27,10 @@ const PrimaryButton = forwardRef<HTMLButtonElement, PrimaryButtonProps>(
       variant="primary"
       size="md"
       disabled={disabled || isLoading}
-      className={cn("h-12 w-full rounded-2xl text-sm font-semibold", className)}
+      className={cn(
+        "h-12 cursor-pointer disabled:cursor-not-allowed w-full rounded-2xl text-sm font-semibold",
+        className
+      )}
       {...props}
     >
       {isLoading ? loadingText : children}

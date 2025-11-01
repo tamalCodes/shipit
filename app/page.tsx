@@ -17,7 +17,7 @@ export default function Home() {
         </header>
 
         <section className="flex flex-col items-start gap-6 text-left">
-          <h1 className="max-w-2xl text-4xl font-semibold leading-tight tracking-tight text-zinc-950">
+          <h1 className="font-display max-w-2xl text-4xl font-semibold leading-tight tracking-tight text-zinc-950">
             Ship faster with a minimal workspace crafted for modern product
             teams.
           </h1>

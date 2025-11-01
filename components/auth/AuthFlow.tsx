@@ -22,6 +22,15 @@ export interface UserCheckResponse {
   exists: boolean;
 }
 
+interface AuthSuccessResponse {
+  token: string;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+  };
+}
+
 interface AuthState {
   step: AuthStep;
   status: AuthStatus;
@@ -152,21 +161,47 @@ type AuthFlowProps = {
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-async function checkEmail(email: string): Promise<UserCheckResponse> {
-  await new Promise((resolve) => setTimeout(resolve, 800));
+async function postJson<TResponse>(
+  url: string,
+  body: Record<string, unknown>
+): Promise<TResponse> {
+  let response: Response;
 
-  const domain = email.split("@")[1] ?? "";
-  const existingDomains = ["existing.com", "team.co", "acme.io"];
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    console.error("Network error while calling", url, error);
+    throw new Error("Unable to reach the server. Please try again.");
+  }
 
-  return {
-    exists:
-      existingDomains.includes(domain.toLowerCase()) ||
-      email.toLowerCase().startsWith("user"),
-  };
+  let payload: unknown = null;
+
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof (payload as { message?: string } | null)?.message === "string"
+        ? (payload as { message?: string }).message
+        : "Request failed. Please try again.";
+
+    throw new Error(message);
+  }
+
+  return payload as TResponse;
 }
 
-async function completeAuth(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 700));
+async function checkEmail(email: string): Promise<UserCheckResponse> {
+  return postJson<UserCheckResponse>("/api/auth/status", { email });
 }
 
 function createSessionToken(prefix: string) {
@@ -213,13 +248,26 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
         dispatch({ type: "setStep", step: "signup", status: "needs_signup" });
       }
     } catch (error) {
-      console.error(error);
-      dispatch({
-        type: "setErrors",
-        errors: { general: "Something went wrong. Please try again." },
-      });
-      dispatch({ type: "setStatus", status: "idle" });
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again.";
+      const lower = message.toLowerCase();
+
+      if (lower.includes("email")) {
+        dispatch({
+          type: "setErrors",
+          errors: { email: message },
+        });
+      } else {
+        dispatch({
+          type: "setErrors",
+          errors: { general: message },
+        });
+      }
     }
+
+    dispatch({ type: "setStatus", status: "idle" });
   };
 
   const handlePasswordSubmit = async () => {
@@ -235,11 +283,38 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
 
     dispatch({ type: "setStatus", status: "submitting" });
 
-    await completeAuth();
-    setAuthToken(createSessionToken("session"));
-    dispatch({ type: "setStatus", status: "done" });
-    router.replace(redirectTo ?? "/");
-    router.refresh();
+    try {
+      const response = await postJson<AuthSuccessResponse>("/api/auth/login", {
+        email: state.email.trim(),
+        password: state.password.trim(),
+      });
+
+      setAuthToken(response.token);
+      dispatch({ type: "setStatus", status: "done" });
+      router.replace(redirectTo ?? "/");
+      router.refresh();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to log in right now. Please try again.";
+
+      if (message.toLowerCase().includes("invalid email or password")) {
+        dispatch({
+          type: "setErrors",
+          errors: {
+            password: "Invalid email or password.",
+          },
+        });
+      } else {
+        dispatch({
+          type: "setErrors",
+          errors: { general: message },
+        });
+      }
+
+      dispatch({ type: "setStatus", status: "needs_password" });
+    }
   };
 
   const handleSignupSubmit = async () => {
@@ -260,11 +335,48 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
 
     dispatch({ type: "setStatus", status: "submitting" });
 
-    await completeAuth();
-    setAuthToken(createSessionToken("session"));
-    dispatch({ type: "setStatus", status: "done" });
-    router.replace(redirectTo ?? "/");
-    router.refresh();
+    try {
+      const response = await postJson<AuthSuccessResponse>("/api/auth/signup", {
+        email: state.email.trim(),
+        password: state.password.trim(),
+        name: state.name.trim(),
+      });
+
+      setAuthToken(response.token);
+      dispatch({ type: "setStatus", status: "done" });
+      router.replace(redirectTo ?? "/");
+      router.refresh();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to create your account right now. Please try again.";
+      const lowered = message.toLowerCase();
+
+      if (lowered.includes("email")) {
+        dispatch({
+          type: "setErrors",
+          errors: { email: message },
+        });
+      } else if (lowered.includes("password")) {
+        dispatch({
+          type: "setErrors",
+          errors: { password: message },
+        });
+      } else if (lowered.includes("name")) {
+        dispatch({
+          type: "setErrors",
+          errors: { name: message },
+        });
+      } else {
+        dispatch({
+          type: "setErrors",
+          errors: { general: message },
+        });
+      }
+
+      dispatch({ type: "setStatus", status: "needs_signup" });
+    }
   };
 
   const handleForgotPassword = () => {

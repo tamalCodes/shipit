@@ -42,7 +42,7 @@ export default function PasswordStep({
   return (
     <div className="space-y-10">
       <header className="space-y-2 text-left">
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-950">
+        <h1 className="font-display text-3xl font-semibold tracking-tight text-zinc-950">
           Welcome back
         </h1>
         <p className="text-sm text-zinc-500">
