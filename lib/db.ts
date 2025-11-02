@@ -51,3 +51,10 @@ export async function getPasswordResetTokensCollection<
   const db = await getDb();
   return db.collection<TSchema>("password_reset_tokens");
 }
+
+export async function getTasksCollection<TSchema = unknown>(): Promise<
+  Collection<TSchema>
+> {
+  const db = await getDb();
+  return db.collection<TSchema>("tasks");
+}

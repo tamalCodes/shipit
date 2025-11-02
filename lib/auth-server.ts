@@ -57,3 +57,13 @@ export function createAuthToken(payload: TokenPayload): string {
 
   return jwt.sign(payload, getJwtSecret(), { expiresIn });
 }
+
+export function verifyAuthToken(token: string): TokenPayload | null {
+  try {
+    const decoded = jwt.verify(token, getJwtSecret());
+    return decoded as TokenPayload;
+  } catch (error) {
+    console.error("Failed to verify auth token", error);
+    return null;
+  }
+}
