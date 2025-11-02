@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 
+import TaskTable from "@/components/tasks/TaskTable";
 import { verifyAuthToken } from "@/lib/auth-server";
 import { isGenericEmail } from "@/lib/email";
-import TaskTable from "@/components/tasks/TaskTable";
 import { type TaskStatus } from "@/lib/schemas/task";
 
 type DemoTask = {
@@ -103,7 +103,7 @@ export default async function TasksPage() {
               <p className="text-sm text-zinc-500">{group.description}</p>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-2xl md:border md:border-zinc-200 md:bg-white md:shadow-sm">
               <TaskTable
                 initialTasks={group.tasks}
                 showAssignee={Boolean(showAssignee)}
