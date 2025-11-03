@@ -31,13 +31,7 @@ type SerializableTask = {
   notes: string | null;
 };
 
-const allowedStatuses: TaskStatus[] = [
-  "todo",
-  "in_progress",
-  "review",
-  "blocked",
-  "done",
-];
+const allowedStatuses: TaskStatus[] = ["todo", "in_progress", "blocked", "done"];
 
 const allowedGroupKeys: TaskGroupKey[] = ["today", "up_next"];
 
