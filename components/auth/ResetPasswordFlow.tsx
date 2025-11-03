@@ -17,11 +17,7 @@ type ResetPasswordFlowProps = {
   token?: string;
 };
 
-type View =
-  | "request"
-  | "request_success"
-  | "reset"
-  | "reset_success";
+type View = "request" | "request_success" | "reset" | "reset_success";
 
 type RequestStatus = "idle" | "loading" | "error";
 
@@ -41,9 +37,7 @@ export default function ResetPasswordFlow({
   const [resetStatus, setResetStatus] = useState<ResetStatus>("idle");
   const [resetError, setResetError] = useState<string | null>(null);
 
-  const [view, setView] = useState<View>(
-    token ? "reset" : "request"
-  );
+  const [view, setView] = useState<View>(token ? "reset" : "request");
 
   const normalizedToken = token ?? requestToken ?? "";
 
@@ -221,9 +215,7 @@ export default function ResetPasswordFlow({
 
   const renderRequestSuccess = () => (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-zinc-900">
-        Check your inbox
-      </h2>
+      <h2 className="text-lg font-semibold text-zinc-900">Check your inbox</h2>
       <p className="text-sm text-zinc-600">
         If an account exists for <span className="font-medium">{email}</span>,
         we just sent you a link to reset your password.
@@ -310,9 +302,7 @@ export default function ResetPasswordFlow({
 
   const renderResetSuccess = () => (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-zinc-900">
-        Password updated
-      </h2>
+      <h2 className="text-lg font-semibold text-zinc-900">Password updated</h2>
       <p className="text-sm text-zinc-600">
         Your password has been changed. You can now close this window and log in
         with your new password.

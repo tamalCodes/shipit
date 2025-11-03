@@ -46,7 +46,7 @@ export async function getUsersCollection<TSchema = unknown>(): Promise<
 }
 
 export async function getPasswordResetTokensCollection<
-  TSchema = unknown,
+  TSchema = unknown
 >(): Promise<Collection<TSchema>> {
   const db = await getDb();
   return db.collection<TSchema>("password_reset_tokens");

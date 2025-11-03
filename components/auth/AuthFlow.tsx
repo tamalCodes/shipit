@@ -437,18 +437,18 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
         <PasswordStep
           email={state.email}
           password={state.password}
-        onPasswordChange={(value) =>
-          dispatch({ type: "updatePassword", password: value })
-        }
-        onSubmit={handlePasswordSubmit}
-        error={state.errors.password}
-        isLoading={isSubmitting}
-        canSubmit={canSubmitPasswordStep}
-        onForgotPassword={handleForgotPassword}
-        onContinueWithGoogle={handleContinueWithGoogle}
-        isGoogleLoading={isGoogleLoading}
-      />
-    );
+          onPasswordChange={(value) =>
+            dispatch({ type: "updatePassword", password: value })
+          }
+          onSubmit={handlePasswordSubmit}
+          error={state.errors.password}
+          isLoading={isSubmitting}
+          canSubmit={canSubmitPasswordStep}
+          onForgotPassword={handleForgotPassword}
+          onContinueWithGoogle={handleContinueWithGoogle}
+          isGoogleLoading={isGoogleLoading}
+        />
+      );
     }
 
     return (

@@ -99,7 +99,11 @@ export default function SignupStep({
               aria-pressed={showPassword}
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? <FiEyeOff className="h-4 w-4" /> : <FiEye className="h-4 w-4" />}
+              {showPassword ? (
+                <FiEyeOff className="h-4 w-4" />
+              ) : (
+                <FiEye className="h-4 w-4" />
+              )}
             </button>
           </div>
 

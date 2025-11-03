@@ -23,10 +23,8 @@ const variantClasses: Record<ButtonVariant, string> = {
     "rounded-2xl border border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50 focus-visible:outline-zinc-300",
   ghost:
     "rounded-full bg-transparent text-zinc-600 hover:text-zinc-900 focus-visible:outline-zinc-400",
-  link:
-    "rounded-none bg-transparent p-0 text-sm font-medium text-zinc-500 underline underline-offset-2 focus-visible:outline-none hover:text-zinc-900",
-  segment:
-    "rounded-full bg-transparent text-sm focus-visible:outline-zinc-900",
+  link: "rounded-none bg-transparent p-0 text-sm font-medium text-zinc-500 underline underline-offset-2 focus-visible:outline-none hover:text-zinc-900",
+  segment: "rounded-full bg-transparent text-sm focus-visible:outline-zinc-900",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -54,7 +52,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const resolvedSize =
-      size ?? (variant === "segment" ? "sm" : variant === "link" ? "none" : "md");
+      size ??
+      (variant === "segment" ? "sm" : variant === "link" ? "none" : "md");
 
     return (
       <button

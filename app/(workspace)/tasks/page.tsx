@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
 
-import TaskBoard, { type TaskBoardGroup } from "@/components/tasks/TaskBoard";
+import TaskBoard from "@/components/tasks/TaskBoard";
+import type { TaskBoardGroup } from "@/components/tasks/types";
 import { verifyAuthToken } from "@/lib/auth-server";
 import { getTasksCollection } from "@/lib/db";
 import { isGenericEmail } from "@/lib/email";

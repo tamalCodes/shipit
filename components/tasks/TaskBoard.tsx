@@ -4,23 +4,13 @@ import { FormEvent, MouseEvent, useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { FiPlus, FiTrash2, FiX } from "react-icons/fi";
 
-import TaskTable, {
-  type TaskTableDropAction,
-  type TaskTableTask,
-} from "@/components/tasks/TaskTable";
+import TaskTable from "@/components/tasks/TaskTable";
+import type {
+  TaskBoardGroup,
+  TaskModel,
+  TaskTableDropAction,
+} from "@/components/tasks/types";
 import { TASK_STATUS_LABELS, type TaskStatus } from "@/lib/schemas/task";
-
-type TaskBoardTaskInput = Omit<TaskTableTask, "id"> & {
-  id?: string;
-  position?: number;
-};
-
-export type TaskBoardGroup = {
-  key: "today" | "up_next";
-  title: string;
-  description: string;
-  tasks: TaskBoardTaskInput[];
-};
 
 type TaskBoardProps = {
   initialGroups: TaskBoardGroup[];
@@ -28,7 +18,7 @@ type TaskBoardProps = {
 };
 
 type ClientTaskGroup = Omit<TaskBoardGroup, "tasks"> & {
-  tasks: TaskTableTask[];
+  tasks: TaskModel[];
 };
 
 function createTaskId(groupKey: string, title: string) {
@@ -55,14 +45,14 @@ const TASK_STATUS_OPTIONS: TaskStatus[] = [
 type TaskCreateFormProps = {
   groupKey: TaskBoardGroup["key"];
   showAssignee: boolean;
-  onSuccess: (task: TaskTableTask, groupKey: TaskBoardGroup["key"]) => void;
+  onSuccess: (task: TaskModel, groupKey: TaskBoardGroup["key"]) => void;
 };
 
 type TaskEditFormProps = {
-  task: TaskTableTask;
+  task: TaskModel;
   groupKey: TaskBoardGroup["key"];
   showAssignee: boolean;
-  onSuccess: (task: TaskTableTask, groupKey: TaskBoardGroup["key"]) => void;
+  onSuccess: (task: TaskModel, groupKey: TaskBoardGroup["key"]) => void;
   onDelete: (taskId: string, groupKey: TaskBoardGroup["key"]) => void;
 };
 
@@ -70,7 +60,7 @@ type CreateTaskResponse = {
   task?: {
     id?: string;
     title?: string;
-    status?: TaskTableTask["status"];
+    status?: TaskModel["status"];
     focusWindow?: string;
     assignedTo?: string | null;
     groupKey?: TaskBoardGroup["key"];
@@ -85,21 +75,21 @@ type TaskModalProps =
       groupKey: TaskBoardGroup["key"];
       showAssignee: boolean;
       onClose: () => void;
-      onCreate: (task: TaskTableTask, groupKey: TaskBoardGroup["key"]) => void;
+      onCreate: (task: TaskModel, groupKey: TaskBoardGroup["key"]) => void;
     }
   | {
       mode: "edit";
       groupKey: TaskBoardGroup["key"];
       showAssignee: boolean;
-      task: TaskTableTask;
+      task: TaskModel;
       onClose: () => void;
-      onUpdate: (task: TaskTableTask, groupKey: TaskBoardGroup["key"]) => void;
+      onUpdate: (task: TaskModel, groupKey: TaskBoardGroup["key"]) => void;
       onDelete: (taskId: string, groupKey: TaskBoardGroup["key"]) => void;
     };
 
 type TaskModalState =
   | { mode: "create"; groupKey: TaskBoardGroup["key"] }
-  | { mode: "edit"; groupKey: TaskBoardGroup["key"]; task: TaskTableTask };
+  | { mode: "edit"; groupKey: TaskBoardGroup["key"]; task: TaskModel };
 
 function TaskCreateForm({
   groupKey,
@@ -130,7 +120,7 @@ function TaskCreateForm({
 
     const payload = {
       title: trimmedTitle,
-      status: "todo" as TaskTableTask["status"],
+      status: "todo" as TaskModel["status"],
       focusWindow: focusWindow.trim(),
       assignedTo: assignedTo.trim() ? assignedTo.trim() : undefined,
       groupKey,
@@ -174,7 +164,7 @@ function TaskCreateForm({
         return;
       }
 
-      const newTask: TaskTableTask = {
+      const newTask: TaskModel = {
         id: created.id,
         title: created.title,
         status: created.status,
@@ -357,13 +347,15 @@ function TaskEditForm({
         return;
       }
 
-      const updatedTask: TaskTableTask = {
+      const updatedTask: TaskModel = {
         id: updated.id,
         title: updated.title,
         status: updated.status,
         focusWindow: updated.focusWindow,
         position:
-          typeof updated.position === "number" ? updated.position : task.position,
+          typeof updated.position === "number"
+            ? updated.position
+            : task.position,
         assignedTo: updated.assignedTo ?? null,
       };
 
@@ -633,8 +625,7 @@ export default function TaskBoard({
           ...task,
           id: task.id ?? createTaskId(group.key, task.title),
           assignedTo: task.assignedTo ?? null,
-          position:
-            typeof task.position === "number" ? task.position : index,
+          position: typeof task.position === "number" ? task.position : index,
         }))
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
     }))
@@ -724,8 +715,12 @@ export default function TaskBoard({
         tasks: [...group.tasks],
       }));
 
-      const sourceGroup = nextGroups.find((group) => group.key === sourceGroupKey);
-      const targetGroup = nextGroups.find((group) => group.key === targetGroupKey);
+      const sourceGroup = nextGroups.find(
+        (group) => group.key === sourceGroupKey
+      );
+      const targetGroup = nextGroups.find(
+        (group) => group.key === targetGroupKey
+      );
 
       if (!sourceGroup || !targetGroup) {
         console.warn("[TaskBoard] Drop ignored – missing target/source group");
@@ -805,7 +800,7 @@ export default function TaskBoard({
   );
 
   const handleTaskCreated = useCallback(
-    (task: TaskTableTask, groupKey: TaskBoardGroup["key"]) => {
+    (task: TaskModel, groupKey: TaskBoardGroup["key"]) => {
       let payload: Array<{
         groupKey: TaskBoardGroup["key"];
         tasks: Array<{ id: string; position: number }>;
@@ -848,7 +843,7 @@ export default function TaskBoard({
   );
 
   const handleTaskUpdated = useCallback(
-    (task: TaskTableTask, updatedGroupKey: TaskBoardGroup["key"]) => {
+    (task: TaskModel, updatedGroupKey: TaskBoardGroup["key"]) => {
       let payload: Array<{
         groupKey: TaskBoardGroup["key"];
         tasks: Array<{ id: string; position: number }>;
@@ -863,20 +858,24 @@ export default function TaskBoard({
           tasks: [...group.tasks],
         }));
 
-        const originalGroup = next.find((group) => group.key === originalGroupKey);
+        const originalGroup = next.find(
+          (group) => group.key === originalGroupKey
+        );
         const targetGroup = next.find((group) => group.key === updatedGroupKey);
 
         if (!originalGroup || !targetGroup) {
           return previous;
         }
 
-        const taskClone: TaskTableTask =
+        const taskClone: TaskModel =
           updatedGroupKey === "up_next"
             ? { ...task, focusWindow: "Coming up" }
             : task;
 
         if (originalGroup === targetGroup) {
-          const index = originalGroup.tasks.findIndex((item) => item.id === task.id);
+          const index = originalGroup.tasks.findIndex(
+            (item) => item.id === task.id
+          );
           if (index >= 0) {
             originalGroup.tasks[index] = taskClone;
           } else {
@@ -1039,4 +1038,3 @@ export default function TaskBoard({
     </>
   );
 }
-

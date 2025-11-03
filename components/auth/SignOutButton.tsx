@@ -1,7 +1,7 @@
 "use client";
 
-import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { FiLogOut } from "react-icons/fi";
 
 import Button from "@/components/ui/Button";
