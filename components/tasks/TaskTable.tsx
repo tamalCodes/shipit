@@ -16,6 +16,7 @@ export type TaskTableTask = {
   title: string;
   status: TaskStatus;
   focusWindow: string;
+  position: number;
   assignedTo?: string | null;
 };
 

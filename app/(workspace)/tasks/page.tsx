@@ -50,7 +50,7 @@ async function loadTaskGroups(
   const tasksCollection = await getTasksCollection<TaskDocument>();
   const tasks = await tasksCollection
     .find({ workspaceId: parsedWorkspaceId })
-    .sort({ createdAt: -1 })
+    .sort({ groupKey: 1, position: 1, createdAt: 1 })
     .limit(500)
     .toArray();
 
@@ -78,6 +78,10 @@ async function loadTaskGroups(
       status,
       focusWindow: task.focusWindow,
       assignedTo: task.assignedTo ?? null,
+      position:
+        typeof task.position === "number"
+          ? task.position
+          : grouped[task.groupKey].length,
     });
   }
 
@@ -85,7 +89,7 @@ async function loadTaskGroups(
     key,
     title: GROUP_META[key].title,
     description: GROUP_META[key].description,
-    tasks: grouped[key],
+    tasks: grouped[key].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
   }));
 }
 

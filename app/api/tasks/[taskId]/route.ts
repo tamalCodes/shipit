@@ -15,6 +15,7 @@ type UpdateTaskRequestBody = {
   focusWindow?: unknown;
   assignedTo?: unknown;
   groupKey?: unknown;
+  position?: unknown;
   notes?: unknown;
 };
 
@@ -25,6 +26,7 @@ type SerializableTask = {
   focusWindow: string;
   assignedTo: string | null;
   groupKey: TaskGroupKey;
+  position: number;
   createdAt: string;
   updatedAt: string;
   notes: string | null;
@@ -41,6 +43,7 @@ function serializeTask(task: TaskDocument): SerializableTask {
     focusWindow: task.focusWindow,
     assignedTo: task.assignedTo ?? null,
     groupKey: task.groupKey,
+    position: task.position,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     notes: task.notes ?? null,
@@ -121,6 +124,7 @@ export async function PATCH(
     const rawFocusWindow = body.focusWindow;
     const rawAssignedTo = body.assignedTo;
     const rawGroupKey = body.groupKey;
+    const rawPosition = body.position;
     const rawNotes = body.notes;
 
     const updateSet: Record<string, unknown> = {};
@@ -179,6 +183,11 @@ export async function PATCH(
       if (normalizedGroupKey === "up_next") {
         updateSet.focusWindow = "Coming up";
       }
+    }
+
+    if (typeof rawPosition === "number" && Number.isFinite(rawPosition)) {
+      updateSet.position = rawPosition;
+      hasChanges = true;
     }
 
     if (typeof rawNotes === "string") {

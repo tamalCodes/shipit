@@ -26,6 +26,7 @@ type SerializableTask = {
   focusWindow: string;
   assignedTo: string | null;
   groupKey: TaskGroupKey;
+  position: number;
   createdAt: string;
   updatedAt: string;
   notes: string | null;
@@ -43,6 +44,7 @@ function serializeTask(task: TaskDocument): SerializableTask {
     focusWindow: task.focusWindow,
     assignedTo: task.assignedTo ?? null,
     groupKey: task.groupKey,
+    position: task.position,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     notes: task.notes ?? null,
@@ -88,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     const tasks = await tasksCollection
       .find({ workspaceId })
-      .sort({ createdAt: -1 })
+      .sort({ groupKey: 1, position: 1, createdAt: 1 })
       .limit(500)
       .toArray();
 
@@ -177,6 +179,20 @@ export async function POST(request: NextRequest) {
         ? rawNotes.trim()
         : undefined;
 
+    const tasksCollection = await getTasksCollection<TaskDocument>();
+    await tasksCollection.createIndex({ workspaceId: 1, groupKey: 1, createdAt: -1 });
+
+    const [minPositionTask] = await tasksCollection
+      .find({ workspaceId, groupKey: normalizedGroupKey })
+      .sort({ position: 1 })
+      .limit(1)
+      .toArray();
+
+    const nextPosition =
+      typeof minPositionTask?.position === "number"
+        ? minPositionTask.position - 1
+        : 0;
+
     const now = new Date();
 
     const taskInput: CreateTaskInput = {
@@ -186,11 +202,9 @@ export async function POST(request: NextRequest) {
       focusWindow: normalizedFocusWindow,
       assignedTo: normalizedAssignedTo,
       groupKey: normalizedGroupKey,
+      position: nextPosition,
       notes: normalizedNotes,
     };
-
-    const tasksCollection = await getTasksCollection<TaskDocument>();
-    await tasksCollection.createIndex({ workspaceId: 1, groupKey: 1, createdAt: -1 });
 
     const insertResult = await tasksCollection.insertOne({
       ...taskInput,
@@ -208,6 +222,7 @@ export async function POST(request: NextRequest) {
       focusWindow: taskInput.focusWindow,
       assignedTo: taskInput.assignedTo ?? null,
       groupKey: taskInput.groupKey,
+      position: taskInput.position,
       createdAt: now,
       updatedAt: now,
       notes: taskInput.notes,

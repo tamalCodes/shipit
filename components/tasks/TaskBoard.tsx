@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, MouseEvent, useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -8,13 +8,11 @@ import TaskTable, {
   type TaskTableDropAction,
   type TaskTableTask,
 } from "@/components/tasks/TaskTable";
-import {
-  TASK_STATUS_LABELS,
-  type TaskStatus,
-} from "@/lib/schemas/task";
+import { TASK_STATUS_LABELS, type TaskStatus } from "@/lib/schemas/task";
 
 type TaskBoardTaskInput = Omit<TaskTableTask, "id"> & {
   id?: string;
+  position?: number;
 };
 
 export type TaskBoardGroup = {
@@ -34,8 +32,14 @@ type ClientTaskGroup = Omit<TaskBoardGroup, "tasks"> & {
 };
 
 function createTaskId(groupKey: string, title: string) {
-  const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return `${groupKey}-${base}-${crypto.randomUUID()}`;
   }
   return `${groupKey}-${base}-${Math.random().toString(36).slice(2, 10)}`;
@@ -70,6 +74,7 @@ type CreateTaskResponse = {
     focusWindow?: string;
     assignedTo?: string | null;
     groupKey?: TaskBoardGroup["key"];
+    position?: number;
   };
   message?: string;
 };
@@ -80,10 +85,7 @@ type TaskModalProps =
       groupKey: TaskBoardGroup["key"];
       showAssignee: boolean;
       onClose: () => void;
-      onCreate: (
-        task: TaskTableTask,
-        groupKey: TaskBoardGroup["key"]
-      ) => void;
+      onCreate: (task: TaskTableTask, groupKey: TaskBoardGroup["key"]) => void;
     }
   | {
       mode: "edit";
@@ -91,10 +93,7 @@ type TaskModalProps =
       showAssignee: boolean;
       task: TaskTableTask;
       onClose: () => void;
-      onUpdate: (
-        task: TaskTableTask,
-        groupKey: TaskBoardGroup["key"]
-      ) => void;
+      onUpdate: (task: TaskTableTask, groupKey: TaskBoardGroup["key"]) => void;
       onDelete: (taskId: string, groupKey: TaskBoardGroup["key"]) => void;
     };
 
@@ -180,6 +179,7 @@ function TaskCreateForm({
         title: created.title,
         status: created.status,
         focusWindow: created.focusWindow,
+        position: typeof created.position === "number" ? created.position : 0,
         assignedTo: created.assignedTo ?? null,
       };
 
@@ -221,7 +221,9 @@ function TaskCreateForm({
           type="text"
           value={focusWindow}
           onChange={(event) => setFocusWindow(event.target.value)}
-          placeholder={groupKey === "today" ? "Today 09:00-10:00" : "Next 3 days"}
+          placeholder={
+            groupKey === "today" ? "Today 09:00-10:00" : "Next 3 days"
+          }
           className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:outline-none"
           disabled={isSubmitting}
         />
@@ -360,6 +362,8 @@ function TaskEditForm({
         title: updated.title,
         status: updated.status,
         focusWindow: updated.focusWindow,
+        position:
+          typeof updated.position === "number" ? updated.position : task.position,
         assignedTo: updated.assignedTo ?? null,
       };
 
@@ -440,7 +444,9 @@ function TaskEditForm({
           type="text"
           value={focusWindow}
           onChange={(event) => setFocusWindow(event.target.value)}
-          placeholder={groupKey === "today" ? "Today 09:00-10:00" : "Next 3 days"}
+          placeholder={
+            groupKey === "today" ? "Today 09:00-10:00" : "Next 3 days"
+          }
           className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:outline-none"
           disabled={isSubmitting}
         />
@@ -453,9 +459,7 @@ function TaskEditForm({
         <div className="relative">
           <select
             value={status}
-            onChange={(event) =>
-              setStatus(event.target.value as TaskStatus)
-            }
+            onChange={(event) => setStatus(event.target.value as TaskStatus)}
             className="peer w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 pr-10 text-sm font-medium text-zinc-800 shadow-inner shadow-zinc-200/40 transition focus:border-zinc-900 focus:outline-none focus:ring-4 focus:ring-zinc-900/10 disabled:cursor-not-allowed disabled:opacity-70"
             disabled={isSubmitting}
           >
@@ -466,7 +470,7 @@ function TaskEditForm({
             ))}
           </select>
           <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400 peer-focus:text-zinc-600">
-            ▾
+            â–¾
           </span>
         </div>
       </div>
@@ -510,7 +514,7 @@ function TaskEditForm({
           disabled={isDeleting || isSubmitting}
         >
           <FiTrash2 className="h-4 w-4" />
-          {isDeleting ? "Deleting…" : "Delete"}
+          {isDeleting ? "Deletingâ€¦" : "Delete"}
         </button>
       </div>
     </form>
@@ -520,7 +524,9 @@ function TaskEditForm({
 function TaskModal(props: TaskModalProps) {
   const { mode, groupKey, showAssignee, onClose } = props;
   const mountNode =
-    typeof window === "undefined" ? null : (document.body as HTMLElement | null);
+    typeof window === "undefined"
+      ? null
+      : (document.body as HTMLElement | null);
 
   useEffect(() => {
     if (!mountNode) {
@@ -622,15 +628,69 @@ export default function TaskBoard({
   const [taskGroups, setTaskGroups] = useState<ClientTaskGroup[]>(() =>
     initialGroups.map((group) => ({
       ...group,
-      tasks: group.tasks.map((task) => ({
-        ...task,
-        id: task.id ?? createTaskId(group.key, task.title),
-        assignedTo: task.assignedTo ?? null,
-      })),
+      tasks: group.tasks
+        .map((task, index) => ({
+          ...task,
+          id: task.id ?? createTaskId(group.key, task.title),
+          assignedTo: task.assignedTo ?? null,
+          position:
+            typeof task.position === "number" ? task.position : index,
+        }))
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
     }))
   );
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<TaskModalState | null>(null);
+
+  const isPersistedTaskId = useCallback((taskId: string) => {
+    return /^[a-f\d]{24}$/i.test(taskId);
+  }, []);
+
+  const persistTaskOrder = useCallback(
+    async (
+      groups: Array<{
+        groupKey: TaskBoardGroup["key"];
+        tasks: Array<{ id: string; position: number }>;
+      }>
+    ) => {
+      const filteredGroups = groups
+        .map((group) => ({
+          groupKey: group.groupKey,
+          tasks: group.tasks.filter((task) => isPersistedTaskId(task.id)),
+        }))
+        .filter((group) => group.tasks.length > 0);
+
+      if (filteredGroups.length === 0) {
+        console.debug("[TaskBoard] No persisted tasks to reorder");
+        return;
+      }
+
+      try {
+        console.debug("[TaskBoard] Persisting task order", filteredGroups);
+        const response = await fetch("/api/tasks/reorder", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ groups: filteredGroups }),
+        });
+
+        if (!response.ok) {
+          const body = await response.text().catch(() => null);
+          console.error(
+            "[TaskBoard] Failed to persist task order",
+            response.status,
+            body
+          );
+        } else {
+          console.debug("[TaskBoard] Task order persisted");
+        }
+      } catch (error) {
+        console.error("[TaskBoard] Failed to persist task order", error);
+      }
+    },
+    [isPersistedTaskId]
+  );
 
   const handleDragStart = useCallback((taskId: string) => {
     setDraggingTaskId(taskId);
@@ -647,76 +707,153 @@ export default function TaskBoard({
       targetGroupKey,
       targetIndex,
     }: TaskTableDropAction) => {
-      setTaskGroups((previous) => {
-        if (
-          sourceGroupKey === targetGroupKey &&
-          sourceIndex === targetIndex
-        ) {
-          return previous;
-        }
+      console.debug("[TaskBoard] handleTaskDrop fired", {
+        sourceGroupKey,
+        sourceIndex,
+        targetGroupKey,
+        targetIndex,
+      });
 
+      if (sourceGroupKey === targetGroupKey && sourceIndex === targetIndex) {
+        console.debug("[TaskBoard] Drop ignored (same position)");
+        return;
+      }
+
+      const nextGroups = taskGroups.map((group) => ({
+        ...group,
+        tasks: [...group.tasks],
+      }));
+
+      const sourceGroup = nextGroups.find((group) => group.key === sourceGroupKey);
+      const targetGroup = nextGroups.find((group) => group.key === targetGroupKey);
+
+      if (!sourceGroup || !targetGroup) {
+        console.warn("[TaskBoard] Drop ignored – missing target/source group");
+        return;
+      }
+
+      if (sourceIndex < 0 || sourceIndex >= sourceGroup.tasks.length) {
+        console.warn("[TaskBoard] Drop ignored – invalid source index");
+        return;
+      }
+
+      const [movedTask] = sourceGroup.tasks.splice(sourceIndex, 1);
+      if (!movedTask) {
+        console.warn("[TaskBoard] Drop ignored – no task found at index");
+        return;
+      }
+
+      let insertionIndex = targetIndex;
+
+      if (sourceGroup === targetGroup && sourceIndex < targetIndex) {
+        insertionIndex = targetIndex - 1;
+      }
+
+      insertionIndex = Math.max(0, insertionIndex);
+      insertionIndex = Math.min(insertionIndex, targetGroup.tasks.length);
+
+      const focusAdjustedTask =
+        targetGroupKey === "up_next"
+          ? { ...movedTask, focusWindow: "Coming up" }
+          : movedTask;
+
+      targetGroup.tasks.splice(insertionIndex, 0, focusAdjustedTask);
+
+      console.debug("[TaskBoard] Task reordered locally", {
+        taskId: focusAdjustedTask.id,
+        from: sourceGroupKey,
+        to: targetGroupKey,
+      });
+
+      const affectedGroupKeys = new Set<TaskBoardGroup["key"]>([
+        targetGroupKey as TaskBoardGroup["key"],
+      ]);
+      if (sourceGroupKey !== targetGroupKey) {
+        affectedGroupKeys.add(sourceGroupKey as TaskBoardGroup["key"]);
+      }
+
+      const payload: Array<{
+        groupKey: TaskBoardGroup["key"];
+        tasks: Array<{ id: string; position: number }>;
+      }> = [];
+
+      for (const groupKey of affectedGroupKeys) {
+        const group = nextGroups.find((item) => item.key === groupKey);
+        if (!group) continue;
+        group.tasks = group.tasks.map((task, index) => ({
+          ...task,
+          position: index,
+        }));
+        const persistedTasks = group.tasks
+          .filter((task) => isPersistedTaskId(task.id))
+          .map((task) => ({
+            id: task.id,
+            position: task.position,
+          }));
+        if (persistedTasks.length > 0) {
+          payload.push({ groupKey, tasks: persistedTasks });
+        }
+      }
+
+      setTaskGroups(nextGroups);
+
+      if (payload.length > 0) {
+        void persistTaskOrder(payload);
+      }
+    },
+    [persistTaskOrder, taskGroups, isPersistedTaskId]
+  );
+
+  const handleTaskCreated = useCallback(
+    (task: TaskTableTask, groupKey: TaskBoardGroup["key"]) => {
+      let payload: Array<{
+        groupKey: TaskBoardGroup["key"];
+        tasks: Array<{ id: string; position: number }>;
+      }> = [];
+
+      setTaskGroups((previous) => {
         const next = previous.map((group) => ({
           ...group,
           tasks: [...group.tasks],
         }));
 
-        const sourceGroup = next.find((group) => group.key === sourceGroupKey);
-        const targetGroup = next.find((group) => group.key === targetGroupKey);
-
-        if (!sourceGroup || !targetGroup) {
-          return previous;
+        const targetGroup = next.find((group) => group.key === groupKey);
+        if (targetGroup) {
+          targetGroup.tasks.unshift({
+            ...task,
+            position: 0,
+          });
+          targetGroup.tasks = targetGroup.tasks.map((item, index) => ({
+            ...item,
+            position: index,
+          }));
+          const persisted = targetGroup.tasks
+            .filter((item) => isPersistedTaskId(item.id))
+            .map((item) => ({ id: item.id, position: item.position }));
+          if (persisted.length > 0) {
+            payload = [{ groupKey, tasks: persisted }];
+          }
         }
-
-        if (
-          sourceIndex < 0 ||
-          sourceIndex >= sourceGroup.tasks.length
-        ) {
-          return previous;
-        }
-
-        const [movedTask] = sourceGroup.tasks.splice(sourceIndex, 1);
-        if (!movedTask) {
-          return previous;
-        }
-
-        let insertionIndex = targetIndex;
-
-        if (sourceGroup === targetGroup && sourceIndex < targetIndex) {
-          insertionIndex = targetIndex - 1;
-        }
-
-        insertionIndex = Math.max(0, insertionIndex);
-        insertionIndex = Math.min(insertionIndex, targetGroup.tasks.length);
-
-        const focusAdjustedTask =
-          targetGroupKey === "up_next"
-            ? { ...movedTask, focusWindow: "Coming up" }
-            : movedTask;
-
-        targetGroup.tasks.splice(insertionIndex, 0, focusAdjustedTask);
 
         return next;
       });
-    },
-    []
-  );
 
-  const handleTaskCreated = useCallback(
-    (task: TaskTableTask, groupKey: TaskBoardGroup["key"]) => {
-      setTaskGroups((previous) =>
-        previous.map((group) =>
-          group.key === groupKey
-            ? { ...group, tasks: [task, ...group.tasks] }
-            : group
-        )
-      );
+      if (payload.length > 0) {
+        void persistTaskOrder(payload);
+      }
+
       setModalState(null);
     },
-    []
+    [isPersistedTaskId, persistTaskOrder]
   );
 
   const handleTaskUpdated = useCallback(
     (task: TaskTableTask, updatedGroupKey: TaskBoardGroup["key"]) => {
+      let payload: Array<{
+        groupKey: TaskBoardGroup["key"];
+        tasks: Array<{ id: string; position: number }>;
+      }> = [];
+
       setTaskGroups((previous) => {
         const originalGroupKey =
           modalState?.mode === "edit" ? modalState.groupKey : updatedGroupKey;
@@ -726,23 +863,20 @@ export default function TaskBoard({
           tasks: [...group.tasks],
         }));
 
-        const originalGroup = next.find(
-          (group) => group.key === originalGroupKey
-        );
-        const targetGroup = next.find(
-          (group) => group.key === updatedGroupKey
-        );
+        const originalGroup = next.find((group) => group.key === originalGroupKey);
+        const targetGroup = next.find((group) => group.key === updatedGroupKey);
 
         if (!originalGroup || !targetGroup) {
           return previous;
         }
 
-        const taskClone: TaskTableTask = { ...task };
+        const taskClone: TaskTableTask =
+          updatedGroupKey === "up_next"
+            ? { ...task, focusWindow: "Coming up" }
+            : task;
 
         if (originalGroup === targetGroup) {
-          const index = originalGroup.tasks.findIndex(
-            (item) => item.id === task.id
-          );
+          const index = originalGroup.tasks.findIndex((item) => item.id === task.id);
           if (index >= 0) {
             originalGroup.tasks[index] = taskClone;
           } else {
@@ -755,30 +889,79 @@ export default function TaskBoard({
           targetGroup.tasks.unshift(taskClone);
         }
 
+        const affectedGroupKeys = new Set<TaskBoardGroup["key"]>([
+          originalGroup.key,
+          targetGroup.key,
+        ]);
+
+        payload = Array.from(affectedGroupKeys).map((groupKey) => {
+          const group = next.find((item) => item.key === groupKey)!;
+          group.tasks = group.tasks.map((item, index) => ({
+            ...item,
+            position: index,
+          }));
+          return {
+            groupKey,
+            tasks: group.tasks
+              .filter((item) => isPersistedTaskId(item.id))
+              .map((item) => ({ id: item.id, position: item.position })),
+          };
+        });
+
+        payload = payload.filter((entry) => entry.tasks.length > 0);
+
         return next;
       });
+
+      if (payload.length > 0) {
+        void persistTaskOrder(payload);
+      }
+
       setModalState(null);
     },
-    [modalState]
+    [isPersistedTaskId, persistTaskOrder, modalState]
   );
 
   const handleTaskDeleted = useCallback(
     (taskId: string, groupKey: TaskBoardGroup["key"]) => {
-      setTaskGroups((previous) =>
-        previous.map((group) =>
-          group.key === groupKey
-            ? {
-                ...group,
-                tasks: group.tasks.filter((task) => task.id !== taskId),
-              }
-            : group
-        )
-      );
+      let payload: Array<{
+        groupKey: TaskBoardGroup["key"];
+        tasks: Array<{ id: string; position: number }>;
+      }> = [];
+
+      setTaskGroups((previous) => {
+        const next = previous.map((group) => ({
+          ...group,
+          tasks: [...group.tasks],
+        }));
+
+        const targetGroup = next.find((group) => group.key === groupKey);
+        if (targetGroup) {
+          targetGroup.tasks = targetGroup.tasks
+            .filter((task) => task.id !== taskId)
+            .map((task, index) => ({
+              ...task,
+              position: index,
+            }));
+          const persisted = targetGroup.tasks
+            .filter((task) => isPersistedTaskId(task.id))
+            .map((task) => ({ id: task.id, position: task.position }));
+          if (persisted.length > 0) {
+            payload = [{ groupKey, tasks: persisted }];
+          }
+        }
+
+        return next;
+      });
+
+      if (payload.length > 0) {
+        void persistTaskOrder(payload);
+      }
+
       setModalState(null);
     },
-    []
+    [isPersistedTaskId, persistTaskOrder]
   );
-
   const openCreateModal = useCallback((groupKey: TaskBoardGroup["key"]) => {
     setModalState({ mode: "create", groupKey });
   }, []);
@@ -856,3 +1039,4 @@ export default function TaskBoard({
     </>
   );
 }
+

@@ -12,6 +12,7 @@ export interface TaskDocument {
   focusWindow: string;
   assignedTo?: string | null;
   groupKey: TaskGroupKey;
+  position: number;
   createdAt: Date;
   updatedAt: Date;
   notes?: string;
@@ -24,6 +25,7 @@ export interface CreateTaskInput {
   focusWindow: string;
   assignedTo?: string | null;
   groupKey: TaskGroupKey;
+  position: number;
   notes?: string;
 }
 
