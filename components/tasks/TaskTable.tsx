@@ -4,25 +4,38 @@
 */
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback } from "react";
+import type { DragEvent } from "react";
 
 import { TASK_STATUS_LABELS, type TaskStatus } from "@/lib/schemas/task";
 import { cn } from "@/lib/utils";
 import { RiDraggable } from "react-icons/ri";
 
-type TaskTableTask = {
+export type TaskTableTask = {
+  id: string;
   title: string;
   status: TaskStatus;
   focusWindow: string;
   assignedTo?: string | null;
 };
 
-type TaskTableProps = {
-  initialTasks: TaskTableTask[];
-  showAssignee: boolean;
+export type TaskTableDropAction = {
+  taskId: string;
+  sourceGroupKey: string;
+  sourceIndex: number;
+  targetGroupKey: string;
+  targetIndex: number;
 };
 
-type DraggableTask = TaskTableTask & { id: string };
+type TaskTableProps = {
+  groupKey: string;
+  tasks: TaskTableTask[];
+  showAssignee: boolean;
+  draggingTaskId: string | null;
+  onDragStart: (taskId: string, index: number) => void;
+  onDragEnd: () => void;
+  onTaskDrop: (action: TaskTableDropAction) => void;
+};
 
 const statusAccent: Record<TaskStatus, string> = {
   todo: "bg-zinc-100 text-zinc-600",
@@ -32,71 +45,92 @@ const statusAccent: Record<TaskStatus, string> = {
   done: "bg-indigo-50 text-indigo-600",
 };
 
+type DragEventElement =
+  | HTMLTableRowElement
+  | HTMLDivElement
+  | HTMLTableSectionElement;
+type DragEventTarget = DragEvent<DragEventElement>;
+
+function readDragData(event: DragEventTarget) {
+  try {
+    const raw = event.dataTransfer.getData("application/json");
+    if (!raw) return null;
+    return JSON.parse(raw) as Omit<TaskTableDropAction, "targetGroupKey" | "targetIndex">;
+  } catch {
+    return null;
+  }
+}
+
 export default function TaskTable({
-  initialTasks,
+  groupKey,
+  tasks,
   showAssignee,
+  draggingTaskId,
+  onDragStart,
+  onDragEnd,
+  onTaskDrop,
 }: TaskTableProps) {
-  const hydratedTasks = useMemo<DraggableTask[]>(() => {
-    return initialTasks.map((task, index) => ({
-      ...task,
-      id: `${index}-${task.title.toLowerCase().replace(/\s+/g, "-")}`,
-    }));
-  }, [initialTasks]);
-
-  const [tasks, setTasks] = useState<DraggableTask[]>(hydratedTasks);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-
-  const reorderTasks = useCallback((sourceId: string, targetId: string) => {
-    setTasks((previous) => {
-      if (sourceId === targetId) return previous;
-
-      const currentIndex = previous.findIndex((item) => item.id === sourceId);
-      const targetIndex = previous.findIndex((item) => item.id === targetId);
-
-      if (currentIndex === -1 || targetIndex === -1) {
-        return previous;
-      }
-
-      const updated = [...previous];
-      const [moved] = updated.splice(currentIndex, 1);
-      updated.splice(targetIndex, 0, moved);
-      return updated;
-    });
-  }, []);
-
-  const handleDragStart = useCallback((taskId: string) => {
-    setDraggingId(taskId);
-  }, []);
-
-  const handleDragOver = useCallback(
+  const handleDragStart = useCallback(
     (
-      event: React.DragEvent<HTMLTableRowElement | HTMLDivElement>,
-      taskId: string
+      event: DragEventTarget,
+      taskId: string,
+      index: number
     ) => {
-      event.preventDefault();
-      if (!draggingId || draggingId === taskId) {
-        return;
-      }
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData(
+        "application/json",
+        JSON.stringify({
+          taskId,
+          sourceGroupKey: groupKey,
+          sourceIndex: index,
+        })
+      );
+      onDragStart(taskId, index);
     },
-    [draggingId]
+    [groupKey, onDragStart]
   );
 
-  const handleDrop = useCallback(
-    (
-      event: React.DragEvent<HTMLTableRowElement | HTMLDivElement>,
-      taskId: string
-    ) => {
+  const handleDragOver = useCallback((event: DragEventTarget) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handleDropOnRow = useCallback(
+    (event: DragEventTarget, targetIndex: number) => {
       event.preventDefault();
-      if (!draggingId) return;
-      reorderTasks(draggingId, taskId);
-      setDraggingId(null);
+      event.stopPropagation();
+      const payload = readDragData(event);
+      if (!payload) return;
+
+      onTaskDrop({
+        ...payload,
+        targetGroupKey: groupKey,
+        targetIndex,
+      });
+      onDragEnd();
     },
-    [draggingId, reorderTasks]
+    [groupKey, onDragEnd, onTaskDrop]
+  );
+
+  const handleDropOnContainer = useCallback(
+    (event: DragEventTarget) => {
+      event.preventDefault();
+      const payload = readDragData(event);
+      if (!payload) return;
+
+      onTaskDrop({
+        ...payload,
+        targetGroupKey: groupKey,
+        targetIndex: tasks.length,
+      });
+      onDragEnd();
+    },
+    [groupKey, onDragEnd, onTaskDrop, tasks.length]
   );
 
   const handleDragEnd = useCallback(() => {
-    setDraggingId(null);
-  }, []);
+    onDragEnd();
+  }, [onDragEnd]);
 
   return (
     <>
@@ -124,18 +158,21 @@ export default function TaskTable({
                 ) : null}
               </tr>
             </thead>
-            <tbody>
+            <tbody
+              onDragOver={handleDragOver}
+              onDrop={handleDropOnContainer}
+            >
               {tasks.map((task, index) => (
                 <tr
                   key={task.id}
                   draggable
-                  onDragStart={() => handleDragStart(task.id)}
-                  onDragOver={(event) => handleDragOver(event, task.id)}
-                  onDrop={(event) => handleDrop(event, task.id)}
+                  onDragStart={(event) => handleDragStart(event, task.id, index)}
+                  onDragOver={handleDragOver}
+                  onDrop={(event) => handleDropOnRow(event, index)}
                   onDragEnd={handleDragEnd}
                   className={cn(
                     "border-b border-zinc-100 last:border-b-0",
-                    draggingId === task.id
+                    draggingTaskId === task.id
                       ? "bg-zinc-100"
                       : "hover:bg-zinc-50 cursor-grab active:cursor-grabbing"
                   )}
@@ -177,18 +214,22 @@ export default function TaskTable({
         </div>
       </div>
 
-      <div className="space-y-4 bg-transparent md:hidden">
-        {tasks.map((task) => (
+      <div
+        className="space-y-4 bg-transparent md:hidden"
+        onDragOver={handleDragOver}
+        onDrop={handleDropOnContainer}
+      >
+        {tasks.map((task, index) => (
           <div
             key={task.id}
             draggable
-            onDragStart={() => handleDragStart(task.id)}
-            onDragOver={(event) => handleDragOver(event, task.id)}
-            onDrop={(event) => handleDrop(event, task.id)}
+            onDragStart={(event) => handleDragStart(event, task.id, index)}
+            onDragOver={handleDragOver}
+            onDrop={(event) => handleDropOnRow(event, index)}
             onDragEnd={handleDragEnd}
             className={cn(
               "rounded-2xl border border-zinc-200 bg-white/90 p-4 transition",
-              draggingId === task.id
+              draggingTaskId === task.id
                 ? "ring-2 ring-zinc-300"
                 : "hover:border-zinc-300 cursor-grab active:cursor-grabbing"
             )}

@@ -1,25 +1,12 @@
 import { cookies } from "next/headers";
 
-import TaskTable from "@/components/tasks/TaskTable";
+import TaskBoard, {
+  type TaskBoardGroup,
+} from "@/components/tasks/TaskBoard";
 import { verifyAuthToken } from "@/lib/auth-server";
 import { isGenericEmail } from "@/lib/email";
-import { type TaskStatus } from "@/lib/schemas/task";
 
-type DemoTask = {
-  title: string;
-  status: TaskStatus;
-  focusWindow: string;
-  assignedTo?: string | null;
-};
-
-type TaskGroup = {
-  key: "today" | "up_next";
-  title: string;
-  description: string;
-  tasks: DemoTask[];
-};
-
-const demoTaskGroups: TaskGroup[] = [
+const demoTaskGroups: TaskBoardGroup[] = [
   {
     key: "today",
     title: "Today",
@@ -93,25 +80,10 @@ export default async function TasksPage() {
         </p>
       </section>
 
-      <section className="space-y-8">
-        {demoTaskGroups.map((group) => (
-          <div key={group.key} className="space-y-4">
-            <div className="space-y-1">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                {group.title}
-              </h3>
-              <p className="text-sm text-zinc-500">{group.description}</p>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl md:border md:border-zinc-200 md:bg-white md:shadow-sm">
-              <TaskTable
-                initialTasks={group.tasks}
-                showAssignee={Boolean(showAssignee)}
-              />
-            </div>
-          </div>
-        ))}
-      </section>
+      <TaskBoard
+        initialGroups={demoTaskGroups}
+        showAssignee={Boolean(showAssignee)}
+      />
     </div>
   );
 }

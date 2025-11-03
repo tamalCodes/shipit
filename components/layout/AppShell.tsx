@@ -115,8 +115,13 @@ function SidebarContent({
             <p className="text-sm font-medium text-zinc-700">Product Team</p>
           </div>
         ) : null}
-        <div className={cn(isCollapsed ? "" : "flex w-full")}>
-          <SignOutButton />
+        <div
+          className={cn(
+            "flex",
+            isCollapsed ? "" : "w-full justify-end"
+          )}
+        >
+          <SignOutButton variant="icon" />
         </div>
       </div>
     </>

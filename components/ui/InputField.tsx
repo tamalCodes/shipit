@@ -11,7 +11,8 @@ type InputFieldProps = {
 
 const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
   ({ label, errorMessage, className, id, required, ...props }, ref) => {
-    const inputId = id ?? props.name ?? label.toLowerCase().replace(/\s+/g, "-");
+    const inputId =
+      id ?? props.name ?? label.toLowerCase().replace(/\s+/g, "-");
 
     return (
       <div className="space-y-1.5">
@@ -22,12 +23,13 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
           {label}
           {required ? <span className="ml-0.5 text-rose-500">*</span> : null}
         </label>
+
         <input
           ref={ref}
           id={inputId}
           required={required}
           className={cn(
-            "block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 disabled:cursor-not-allowed disabled:opacity-70",
+            "block w-full rounded-md border outline-none focus:outline-none focus-visible:outline-none focus:ring-0 active:ring-0 border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 disabled:cursor-not-allowed disabled:opacity-70",
             className
           )}
           {...props}
