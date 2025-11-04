@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FiBarChart2, FiCheckSquare, FiMenu, FiX } from "react-icons/fi";
@@ -133,13 +133,6 @@ export default function AppShell({ children }: AppShellProps) {
   const [isCollapsed, setCollapsed] = useState(true);
   const [isMobileOpen, setMobileOpen] = useState(false);
 
-  const activeItem = useMemo(() => {
-    return navItems.find((item) => {
-      if (pathname === item.href) return true;
-      return pathname.startsWith(`${item.href}/`);
-    });
-  }, [pathname]);
-
   const handleMouseEnter = () => {
     setCollapsed(false);
   };
@@ -183,28 +176,16 @@ export default function AppShell({ children }: AppShellProps) {
       ) : null}
 
       <div className="flex h-full flex-1 flex-col">
-        <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-4 sm:px-6 md:pl-24">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileOpen(true)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900 md:hidden"
-              aria-label="Open navigation"
-            >
-              <FiMenu className="h-5 w-5" />
-            </button>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-zinc-400">
-                Overview
-              </p>
-              <h1 className="text-lg font-semibold text-zinc-900">
-                {activeItem?.label ?? "Workspace"}
-              </h1>
-            </div>
-          </div>
-        </header>
-        <main className="flex-1 overflow-y-auto bg-zinc-50 md:pl-24">
-          <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+        <main className="relative flex-1 overflow-y-auto bg-zinc-50 md:pl-24">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="md:hidden absolute left-4 top-4 z-40 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900"
+            aria-label="Open navigation"
+          >
+            <FiMenu className="h-5 w-5" />
+          </button>
+          <div className="mx-auto w-full max-w-6xl px-4 py-8 pt-16 sm:px-6 sm:pt-8">
             {children}
           </div>
         </main>

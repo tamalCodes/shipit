@@ -1,8 +1,18 @@
 ﻿"use client";
 
-import { FormEvent, MouseEvent, useCallback, useEffect, useState } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  MouseEvent,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
-import { FiPlus, FiTrash2, FiX } from "react-icons/fi";
+import { FiChevronDown, FiPlus, FiTrash2, FiX } from "react-icons/fi";
 
 import TaskTable from "@/components/tasks/TaskTable";
 import type {
@@ -15,6 +25,11 @@ import { TASK_STATUS_LABELS, type TaskStatus } from "@/lib/schemas/task";
 type TaskBoardProps = {
   initialGroups: TaskBoardGroup[];
   showAssignee: boolean;
+  showAddButton?: boolean;
+};
+
+export type TaskBoardHandle = {
+  openCreateTask: (groupKey: TaskBoardGroup["key"]) => void;
 };
 
 type ClientTaskGroup = Omit<TaskBoardGroup, "tasks"> & {
@@ -54,6 +69,12 @@ type TaskEditFormProps = {
   showAssignee: boolean;
   onSuccess: (task: TaskModel, groupKey: TaskBoardGroup["key"]) => void;
   onDelete: (taskId: string, groupKey: TaskBoardGroup["key"]) => void;
+  onDeletingChange?: (isDeleting: boolean) => void;
+};
+
+type TaskEditFormHandle = {
+  deleteTask: () => Promise<void>;
+  isDeleting: boolean;
 };
 
 type CreateTaskResponse = {
@@ -186,9 +207,39 @@ function TaskCreateForm({
     }
   };
 
+  const handleFormKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLFormElement>) => {
+      if (
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "BUTTON") {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (!isSubmitting) {
+        event.currentTarget.requestSubmit();
+      }
+    },
+    [isSubmitting]
+  );
+
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
-      <div className="space-y-2">
+    <form
+      className="space-y-4"
+      onSubmit={handleSubmit}
+      onKeyDown={handleFormKeyDown}
+    >
+      <div className="space-y-1.5">
         <label className="block text-xs font-medium uppercase tracking-wide text-zinc-500">
           Title
         </label>
@@ -197,7 +248,7 @@ function TaskCreateForm({
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="What needs to get done?"
-          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 focus:outline-none"
+          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
           autoFocus
           disabled={isSubmitting}
         />
@@ -214,13 +265,13 @@ function TaskCreateForm({
           placeholder={
             groupKey === "today" ? "Today 09:00-10:00" : "Next 3 days"
           }
-          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:outline-none"
+          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
           disabled={isSubmitting}
         />
       </div>
 
       {showAssignee ? (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <label className="block text-xs font-medium uppercase tracking-wide text-zinc-500">
             Assignee (optional)
           </label>
@@ -229,7 +280,7 @@ function TaskCreateForm({
             value={assignedTo}
             onChange={(event) => setAssignedTo(event.target.value)}
             placeholder="teammate@company.com"
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:outline-none"
+            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
             disabled={isSubmitting}
           />
         </div>
@@ -242,27 +293,39 @@ function TaskCreateForm({
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          className={`inline-flex justify-center rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none ${
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none ${
             isSubmitting
               ? "cursor-not-allowed bg-zinc-300 text-white"
               : "bg-zinc-900 text-white hover:bg-zinc-800"
           }`}
           disabled={isSubmitting}
         >
-          {isSubmitting ? "Saving..." : "Add task"}
+          {isSubmitting ? (
+            "Saving..."
+          ) : (
+            <>
+              <span>Add task</span>
+              <span
+                aria-hidden="true"
+                title="Press Enter to add"
+                className="inline-flex h-5 items-center justify-center rounded border border-white/40 bg-white/10 px-1.5 text-[10px] font-semibold leading-none text-white/80"
+              >
+                Enter
+              </span>
+              <span className="sr-only">Press Enter to add</span>
+            </>
+          )}
         </button>
       </div>
     </form>
   );
 }
 
-function TaskEditForm({
-  task,
-  groupKey,
-  showAssignee,
-  onSuccess,
-  onDelete,
-}: TaskEditFormProps) {
+const TaskEditForm = forwardRef<TaskEditFormHandle, TaskEditFormProps>(
+  (
+    { task, groupKey, showAssignee, onSuccess, onDelete, onDeletingChange },
+    ref
+  ) => {
   const isPersistedTask = /^[a-f\d]{24}$/i.test(task.id);
   const [title, setTitle] = useState(task.title);
   const [focusWindow, setFocusWindow] = useState(task.focusWindow);
@@ -368,7 +431,7 @@ function TaskEditForm({
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!isPersistedTask || isDeleting || isSubmitting) {
       if (!isPersistedTask) {
         setError(
@@ -379,6 +442,7 @@ function TaskEditForm({
     }
 
     setDeleting(true);
+    onDeletingChange?.(true);
     setError(null);
 
     try {
@@ -409,11 +473,59 @@ function TaskEditForm({
       setError("Unable to delete the task right now.");
     } finally {
       setDeleting(false);
+      onDeletingChange?.(false);
     }
-  };
+  }, [
+    groupKey,
+    isDeleting,
+    isPersistedTask,
+    isSubmitting,
+    onDelete,
+    onDeletingChange,
+    task.id,
+  ]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      deleteTask: handleDelete,
+      isDeleting,
+    }),
+    [handleDelete, isDeleting]
+  );
+
+  const handleEditFormKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLFormElement>) => {
+      if (
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "BUTTON") {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (!isSubmitting && !isDeleting) {
+        event.currentTarget.requestSubmit();
+      }
+    },
+    [isSubmitting, isDeleting]
+  );
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
+    <form
+      className="space-y-5"
+      onSubmit={handleSubmit}
+      onKeyDown={handleEditFormKeyDown}
+    >
       <div className="space-y-2">
         <label className="block text-xs font-medium uppercase tracking-wide text-zinc-500">
           Title
@@ -423,47 +535,49 @@ function TaskEditForm({
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="What needs to get done?"
-          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 focus:outline-none"
+          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
           disabled={isSubmitting}
         />
       </div>
 
-      <div className="space-y-2">
-        <label className="block text-xs font-medium uppercase tracking-wide text-zinc-500">
-          Focus window
-        </label>
-        <input
-          type="text"
-          value={focusWindow}
-          onChange={(event) => setFocusWindow(event.target.value)}
-          placeholder={
-            groupKey === "today" ? "Today 09:00-10:00" : "Next 3 days"
-          }
-          className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:outline-none"
-          disabled={isSubmitting}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <label className="block text-xs font-medium uppercase tracking-wide text-zinc-500">
-          Status
-        </label>
-        <div className="relative">
-          <select
-            value={status}
-            onChange={(event) => setStatus(event.target.value as TaskStatus)}
-            className="peer w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 pr-10 text-sm font-medium text-zinc-800 shadow-inner shadow-zinc-200/40 transition focus:border-zinc-900 focus:outline-none focus:ring-4 focus:ring-zinc-900/10 disabled:cursor-not-allowed disabled:opacity-70"
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="block text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Focus window
+          </label>
+          <input
+            type="text"
+            value={focusWindow}
+            onChange={(event) => setFocusWindow(event.target.value)}
+            placeholder={
+              groupKey === "today" ? "Today 09:00-10:00" : "Next 3 days"
+            }
+            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
             disabled={isSubmitting}
-          >
-            {TASK_STATUS_OPTIONS.map((value) => (
-              <option key={value} value={value}>
-                {TASK_STATUS_LABELS[value]}
-              </option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400 peer-focus:text-zinc-600">
-            â–¾
-          </span>
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Status
+          </label>
+          <div className="relative">
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value as TaskStatus)}
+              className="peer w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 pr-10 text-sm font-medium text-zinc-800 shadow-inner shadow-zinc-200/40 transition focus:border-zinc-900 focus:outline-none focus:ring-4 focus:ring-zinc-900/10 disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={isSubmitting}
+            >
+              {TASK_STATUS_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {TASK_STATUS_LABELS[value]}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-400 peer-focus:text-zinc-600">
+              <FiChevronDown className="h-4 w-4" aria-hidden="true" />
+            </span>
+          </div>
         </div>
       </div>
 
@@ -477,7 +591,7 @@ function TaskEditForm({
             value={assignedTo}
             onChange={(event) => setAssignedTo(event.target.value)}
             placeholder="teammate@company.com"
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:outline-none"
+            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
             disabled={isSubmitting}
           />
         </div>
@@ -487,10 +601,10 @@ function TaskEditForm({
         <p className="text-sm font-medium text-rose-600">{error}</p>
       ) : null}
 
-      <div className="flex items-center gap-3">
+      <div className="flex justify-end">
         <button
           type="submit"
-          className={`inline-flex justify-center rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none ${
+          className={`inline-flex justify-center rounded-xl px-4 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-zinc-900/10 ${
             isSubmitting || isDeleting
               ? "cursor-not-allowed bg-zinc-300 text-white"
               : "bg-zinc-900 text-white hover:bg-zinc-800"
@@ -499,22 +613,16 @@ function TaskEditForm({
         >
           {isSubmitting ? "Saving..." : "Save changes"}
         </button>
-        <button
-          type="button"
-          onClick={handleDelete}
-          className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-sm font-semibold text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={isDeleting || isSubmitting}
-        >
-          <FiTrash2 className="h-4 w-4" />
-          {isDeleting ? "Deletingâ€¦" : "Delete"}
-        </button>
       </div>
     </form>
   );
-}
+});
 
 function TaskModal(props: TaskModalProps) {
   const { mode, groupKey, showAssignee, onClose } = props;
+  const editFormRef = useRef<TaskEditFormHandle | null>(null);
+  const [isEditDeleting, setEditDeleting] = useState(false);
+
   const mountNode =
     typeof window === "undefined"
       ? null
@@ -566,6 +674,20 @@ function TaskModal(props: TaskModalProps) {
         className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
         onClick={handleCardClick}
       >
+        {mode === "edit" ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (mode !== "edit" || isEditDeleting) return;
+              void editFormRef.current?.deleteTask();
+            }}
+            className="absolute right-14 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 text-zinc-500 transition hover:border-rose-200 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={isEditDeleting ? "Deleting task..." : "Delete task"}
+            disabled={isEditDeleting}
+          >
+            <FiTrash2 className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onClose}
@@ -576,16 +698,15 @@ function TaskModal(props: TaskModalProps) {
         </button>
 
         <div className="space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold text-zinc-900">
-              {mode === "create" ? "New task" : "Edit task"}
-            </h2>
-            <p className="text-sm text-zinc-600">
-              {mode === "create"
-                ? "Capture what matters right now. You can reorder or assign it later."
-                : "Tidy up the details and status so everyone stays aligned."}
-            </p>
-          </div>
+          {mode === "create" ? (
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-zinc-900">New task</h2>
+              <p className="text-sm text-zinc-600">
+                Capture what matters right now. You can reorder or assign it
+                later.
+              </p>
+            </div>
+          ) : null}
 
           {mode === "create" ? (
             <TaskCreateForm
@@ -597,6 +718,7 @@ function TaskModal(props: TaskModalProps) {
             />
           ) : (
             <TaskEditForm
+              ref={editFormRef}
               task={props.task}
               groupKey={groupKey}
               showAssignee={showAssignee}
@@ -604,6 +726,7 @@ function TaskModal(props: TaskModalProps) {
                 props.onUpdate(task, updatedGroupKey)
               }
               onDelete={props.onDelete}
+              onDeletingChange={setEditDeleting}
             />
           )}
         </div>
@@ -613,10 +736,10 @@ function TaskModal(props: TaskModalProps) {
   );
 }
 
-export default function TaskBoard({
-  initialGroups,
-  showAssignee,
-}: TaskBoardProps) {
+const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(function TaskBoard(
+  { initialGroups, showAssignee, showAddButton = true },
+  ref
+) {
   const [taskGroups, setTaskGroups] = useState<ClientTaskGroup[]>(() =>
     initialGroups.map((group) => ({
       ...group,
@@ -723,18 +846,18 @@ export default function TaskBoard({
       );
 
       if (!sourceGroup || !targetGroup) {
-        console.warn("[TaskBoard] Drop ignored – missing target/source group");
+        console.warn("[TaskBoard] Drop ignored - missing target/source group");
         return;
       }
 
       if (sourceIndex < 0 || sourceIndex >= sourceGroup.tasks.length) {
-        console.warn("[TaskBoard] Drop ignored – invalid source index");
+        console.warn("[TaskBoard] Drop ignored - invalid source index");
         return;
       }
 
       const [movedTask] = sourceGroup.tasks.splice(sourceIndex, 1);
       if (!movedTask) {
-        console.warn("[TaskBoard] Drop ignored – no task found at index");
+        console.warn("[TaskBoard] Drop ignored - no task found at index");
         return;
       }
 
@@ -965,6 +1088,14 @@ export default function TaskBoard({
     setModalState({ mode: "create", groupKey });
   }, []);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      openCreateTask: openCreateModal,
+    }),
+    [openCreateModal]
+  );
+
   const closeModal = useCallback(() => {
     setModalState(null);
   }, []);
@@ -1000,16 +1131,18 @@ export default function TaskBoard({
       ) : null}
 
       <section className="space-y-8">
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => openCreateModal("today")}
-            className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900/20"
-          >
-            <FiPlus className="h-4 w-4" aria-hidden="true" />
-            Add task
-          </button>
-        </div>
+        {showAddButton ? (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => openCreateModal("today")}
+              className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900/20"
+            >
+              <FiPlus className="h-4 w-4" aria-hidden="true" />
+              Add task
+            </button>
+          </div>
+        ) : null}
 
         {taskGroups.map((group) => (
           <div key={group.key} className="space-y-4">
@@ -1037,4 +1170,15 @@ export default function TaskBoard({
       </section>
     </>
   );
-}
+});
+
+TaskEditForm.displayName = "TaskEditForm";
+
+TaskBoard.displayName = "TaskBoard";
+
+export default TaskBoard;
+
+
+
+
+

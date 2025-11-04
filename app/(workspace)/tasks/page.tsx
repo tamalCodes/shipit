@@ -1,7 +1,7 @@
-import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
+import { cookies } from "next/headers";
 
-import TaskBoard from "@/components/tasks/TaskBoard";
+import TasksView from "@/components/tasks/TasksView";
 import type { TaskBoardGroup } from "@/components/tasks/types";
 import { verifyAuthToken } from "@/lib/auth-server";
 import { getTasksCollection } from "@/lib/db";
@@ -23,7 +23,12 @@ const GROUP_META: Record<
   },
 };
 
-const allowedStatuses: TaskStatus[] = ["todo", "in_progress", "blocked", "done"];
+const allowedStatuses: TaskStatus[] = [
+  "todo",
+  "in_progress",
+  "blocked",
+  "done",
+];
 
 const EMPTY_GROUPS: TaskBoardGroup[] = (["today", "up_next"] as const).map(
   (key) => ({
@@ -69,9 +74,7 @@ async function loadTaskGroups(
       continue;
     }
 
-    const status = allowedStatuses.includes(task.status)
-      ? task.status
-      : "todo";
+    const status = allowedStatuses.includes(task.status) ? task.status : "todo";
 
     grouped[task.groupKey].push({
       id: task._id.toHexString(),
@@ -105,21 +108,11 @@ export default async function TasksPage() {
   const taskGroups = await loadTaskGroups(payload?.sub);
 
   return (
-    <div className="space-y-10">
-      <section className="flex flex-col gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight text-zinc-900">
-          Daily focus
-        </h2>
-        <p className="max-w-2xl text-sm leading-6 text-zinc-600">
-          Ship what’s already in motion first. Reorder tasks as priorities shift
-          so the team always knows what to execute next.
-        </p>
-      </section>
-
-      <TaskBoard
-        initialGroups={taskGroups}
-        showAssignee={Boolean(showAssignee)}
-      />
-    </div>
+    <TasksView
+      initialGroups={taskGroups}
+      showAssignee={Boolean(showAssignee)}
+    />
   );
 }
+
+

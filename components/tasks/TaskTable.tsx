@@ -4,15 +4,19 @@
 */
 "use client";
 
+import type {
+  TaskBoardGroup,
+  TaskModel,
+  TaskTableDropAction,
+} from "@/components/tasks/types";
 import { TASK_STATUS_LABELS, type TaskStatus } from "@/lib/schemas/task";
 import { cn } from "@/lib/utils";
-import type { TaskModel, TaskTableDropAction } from "@/components/tasks/types";
 import type { DragEvent, MouseEvent } from "react";
 import { useCallback } from "react";
 import { RiDraggable } from "react-icons/ri";
 
 type TaskTableProps = {
-  groupKey: string;
+  groupKey: TaskBoardGroup["key"];
   tasks: TaskModel[];
   showAssignee: boolean;
   draggingTaskId: string | null;
@@ -215,7 +219,7 @@ export default function TaskTable({
                         aria-hidden="true"
                       />
                       <div>
-                        <p className="text-sm font-semibold text-zinc-900">
+                        <p className="text-sm font-medium text-zinc-900">
                           {task.title}
                         </p>
                       </div>
@@ -266,17 +270,18 @@ export default function TaskTable({
                 : "hover:border-zinc-300 cursor-grab active:cursor-grabbing"
             )}
           >
-            <div className="flex items-center gap-2 text-zinc-400">
+            <div className="flex items-start gap-3">
               <RiDraggable
                 className="mt-1 h-4 w-4 flex-shrink-0 text-zinc-400"
                 aria-hidden="true"
               />
-            </div>
-
-            <div className="mt-3 space-y-3">
               <p className="text-sm font-semibold text-zinc-900">
                 {task.title}
               </p>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <p className="text-xs text-zinc-500">{task.focusWindow}</p>
               <span
                 className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
                   statusAccent[task.status]
@@ -284,14 +289,13 @@ export default function TaskTable({
               >
                 {TASK_STATUS_LABELS[task.status]}
               </span>
-
-              <p className="text-xs text-zinc-500">{task.focusWindow}</p>
-              {showAssignee ? (
-                <p className="text-xs font-medium text-zinc-600">
-                  {task.assignedTo ?? "Unassigned"}
-                </p>
-              ) : null}
             </div>
+
+            {showAssignee ? (
+              <p className="mt-2 text-xs font-medium text-zinc-600">
+                {task.assignedTo ?? "Unassigned"}
+              </p>
+            ) : null}
           </div>
         ))}
       </div>

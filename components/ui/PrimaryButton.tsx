@@ -1,9 +1,8 @@
 "use client";
 
-import { forwardRef } from "react";
-
 import Button, { type ButtonProps } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { forwardRef } from "react";
 
 type PrimaryButtonProps = ButtonProps & {
   isLoading?: boolean;
