@@ -2,7 +2,12 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 const AUTH_PATH = "/auth";
-const PUBLIC_PATHS = new Set<string>([AUTH_PATH, "/reset-password"]);
+const PUBLIC_PATHS = new Set<string>([
+  AUTH_PATH,
+  "/reset-password",
+  "/manifest.webmanifest",
+  "/sw.js",
+]);
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;
@@ -11,6 +16,7 @@ function isPublicPath(pathname: string) {
   if (pathname.startsWith("/_next")) return true;
   if (pathname.startsWith("/favicon")) return true;
   if (pathname.startsWith("/images")) return true;
+  if (pathname.startsWith("/icons")) return true;
   if (pathname === "/") return false;
   return false;
 }
@@ -46,5 +52,7 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"],
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest.webmanifest|sw.js|icons/).*)",
+  ],
 };
