@@ -1,5 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any */
-/*
+﻿/*
   A light-weight drag and drop table used for prioritising tasks.
   Reorders items locally so users can focus on what comes next.
 */
@@ -13,7 +12,8 @@ import type {
 import { TASK_STATUS_LABELS, type TaskStatus } from "@/lib/schemas/task";
 import { cn } from "@/lib/utils";
 import type { DragEvent, MouseEvent } from "react";
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { FiCheck, FiChevronDown, FiMoreVertical } from "react-icons/fi";
 import { RiDraggable } from "react-icons/ri";
 
 type TaskTableProps = {
@@ -25,6 +25,7 @@ type TaskTableProps = {
   onDragEnd: () => void;
   onTaskDrop: (action: TaskTableDropAction) => void;
   onTaskOpen: (task: TaskModel) => void;
+  onTaskComplete: (task: TaskModel, index: number) => Promise<void> | void;
 };
 
 const statusAccent: Record<TaskStatus, string> = {
@@ -62,7 +63,46 @@ export default function TaskTable({
   onDragEnd,
   onTaskDrop,
   onTaskOpen,
+  onTaskComplete,
 }: TaskTableProps) {
+  const [completionOverrides, setCompletionOverrides] = useState<
+    Partial<Record<string, boolean>>
+  >({});
+
+  const getIsDone = useCallback(
+    (task: TaskModel) => completionOverrides[task.id] ?? task.status === "done",
+    [completionOverrides]
+  );
+
+  const markCompleteOptimistically = useCallback((taskId: string) => {
+    setCompletionOverrides((prev) => ({
+      ...prev,
+      [taskId]: true,
+    }));
+  }, []);
+
+  const clearCompletionOverride = useCallback((taskId: string) => {
+    setCompletionOverrides((prev) => {
+      if (!(taskId in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+  }, []);
+
+  const revertCompletionOverride = useCallback((taskId: string) => {
+    setCompletionOverrides((prev) => {
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+  }, []);
+
+  const [isTodayOpen, setIsTodayOpen] = useState(true);
+  const [isNextUpOpen, setIsNextUpOpen] = useState(true);
+
   const handleDragStart = useCallback(
     (event: DragEventTarget, taskId: string, index: number) => {
       event.dataTransfer.effectAllowed = "move";
@@ -119,7 +159,9 @@ export default function TaskTable({
 
   const handleTaskActivate = useCallback(
     (
-      event: MouseEvent<HTMLTableRowElement | HTMLDivElement>,
+      event: MouseEvent<
+        HTMLTableRowElement | HTMLDivElement | HTMLButtonElement
+      >,
       task: TaskModel
     ) => {
       event.preventDefault();
@@ -134,6 +176,134 @@ export default function TaskTable({
   const handleDragEnd = useCallback(() => {
     onDragEnd();
   }, [onDragEnd]);
+
+  const sortedTasks = useMemo(() => {
+    return [...tasks].sort((a, b) => {
+      const aDone = getIsDone(a);
+      const bDone = getIsDone(b);
+      if (aDone !== bDone) {
+        return aDone ? 1 : -1;
+      }
+      return b.position - a.position;
+    });
+  }, [getIsDone, tasks]);
+
+  const sortedEntries = useMemo(
+    () => sortedTasks.map((task, index) => ({ task, index })),
+    [sortedTasks]
+  );
+
+  const todayEntries = sortedEntries.slice(0, 10);
+  const nextUpEntries = sortedEntries.slice(10);
+  const hasNextUp = nextUpEntries.length > 0;
+
+  const renderTaskRow = (task: TaskModel, index: number) => {
+    const isDone = getIsDone(task);
+
+    return (
+      <div
+        key={task.id}
+        draggable
+        onDragStart={(event) => handleDragStart(event, task.id, index)}
+        onDragOver={handleDragOver}
+        onDrop={(event) => handleDropOnRow(event, index)}
+        onDragEnd={handleDragEnd}
+        onClick={async (event) => {
+          event.preventDefault();
+          if (draggingTaskId || isDone) return;
+          markCompleteOptimistically(task.id);
+          try {
+            await onTaskComplete(task, index);
+            clearCompletionOverride(task.id);
+          } catch (error) {
+            console.error("Failed to complete task", error);
+            revertCompletionOverride(task.id);
+          }
+        }}
+        className={cn(
+          "flex items-center gap-3 px-1 py-3 text-sm transition",
+          draggingTaskId === task.id
+            ? "bg-zinc-100"
+            : "hover:bg-zinc-50 cursor-grab active:cursor-grabbing"
+        )}
+      >
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={isDone}
+          aria-label={
+            isDone ? "Mark task as incomplete" : "Mark task as complete"
+          }
+          className={cn(
+            "flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border transition",
+            isDone
+              ? "border-black bg-black text-white"
+              : "border-zinc-300 bg-transparent text-transparent"
+          )}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (isDone) return;
+            markCompleteOptimistically(task.id);
+            void Promise.resolve(onTaskComplete(task, index))
+              .then(() => {
+                clearCompletionOverride(task.id);
+              })
+              .catch((error) => {
+                console.error("Failed to complete task", error);
+                revertCompletionOverride(task.id);
+              });
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          {isDone ? <FiCheck className="h-3.5 w-3.5" /> : null}
+        </button>
+
+        <div className="flex flex-1 min-w-0 items-center justify-between gap-3 overflow-hidden">
+          <span
+            className={cn(
+              "flex-1 min-w-0 truncate text-[18px] font-medium",
+              isDone ? "line-through text-zinc-400" : "text-zinc-700"
+            )}
+            title={task.title}
+          >
+            {task.title}
+          </span>
+
+          <div className="flex shrink-0 items-center gap-2 pl-2">
+            <span
+              className={cn(
+                "ml-2 shrink-0 rounded-md border px-3 py-[5px] text-[15px] font-medium leading-none",
+                isDone && "opacity-30",
+                task.focusWindow === "Today"
+                  ? "bg-rose-100 text-rose-600 border-rose-200"
+                  : "bg-amber-50 text-amber-600 border-amber-200"
+              )}
+              title={task.focusWindow}
+            >
+              {task.focusWindow}
+            </span>
+            <button
+              type="button"
+              aria-label="Task actions"
+              className={cn(
+                "flex h-6 w-6 items-center justify-center text-zinc-400 transition hover:text-zinc-600",
+                isDone && "opacity-30"
+              )}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                handleTaskActivate(event, task);
+              }}
+            >
+              <FiMoreVertical className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   if (tasks.length === 0) {
     return (
@@ -251,78 +421,83 @@ export default function TaskTable({
       </div>
 
       <div
-        className="space-y-3 bg-transparent md:hidden"
+        className="md:hidden space-y-4"
         onDragOver={handleDragOver}
         onDrop={handleDropOnContainer}
       >
-        {[...tasks]
-          .sort((a, b) => b.position - a.position) // reverse by position
-          .map((task, index) => {
-            console.log("🚀 ~ TaskTable ~ task:", task);
-            const isDone = task.status === "done";
-
-            return (
-              <div
-                key={task.id}
-                draggable
-                onDragStart={(event) => handleDragStart(event, task.id, index)}
-                onDragOver={handleDragOver}
-                onDrop={(event) => handleDropOnRow(event, index)}
-                onDragEnd={handleDragEnd}
+        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setIsTodayOpen((prev) => !prev)}
+            className="flex w-full items-center justify-between px-3 py-3 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <FiChevronDown
                 className={cn(
-                  "flex items-center justify-between rounded-xl px-1 py-2 text-sm",
-                  draggingTaskId === task.id
-                    ? "bg-zinc-100"
-                    : "hover:bg-zinc-50 cursor-grab active:cursor-grabbing"
+                  "h-4 w-4 text-zinc-500 transition-transform",
+                  isTodayOpen ? "rotate-0" : "-rotate-90"
                 )}
-              >
-                {/* Checkbox */}
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    // hook this up to your "mark done" logic
-                    onTaskOpen(task);
-                  }}
-                  className={cn(
-                    "mr-3 flex h-5 w-5 items-center justify-center rounded border text-[10px]",
-                    isDone
-                      ? "border-violet-600 bg-violet-600 text-white"
-                      : "border-zinc-600 bg-transparent"
-                  )}
-                >
-                  {isDone ? "✓" : null}
-                </button>
+              />
+              <p className="text-[17px] flex gap-1 font-display items-center font-semibold text-zinc-800">
+                <span className="text-xl">💪</span>{" "}
+                <span className="pt-[5px]">Today</span>
+              </p>
+            </div>
+            <span className="rounded-md bg-zinc-100 p-1 px-2.5 flex items-center justify-center aspect-square text-sm font-medium text-zinc-900">
+              {todayEntries.length}
+            </span>
+          </button>
 
-                {/* Title + pill */}
-                <button
-                  type="button"
-                  onClick={(event) => handleTaskActivate(event as any, task)}
-                  className="flex flex-1 items-center gap-2 text-left justify-between"
-                >
-                  <span
-                    className={cn(
-                      "truncate text-[18px] font-medium",
-                      isDone ? "line-through text-zinc-400" : "text-zinc-600"
-                    )}
-                  >
-                    {task.title}
-                  </span>
-
-                  <span
-                    className={cn(
-                      "ml-2 shrink-0 rounded-md px-3 py-1 text-[15px] font-medium",
-                      task.focusWindow === "Today"
-                        ? "bg-rose-100 text-rose-600 ring-rose-300 ring"
-                        : "bg-amber-50 text-amber-600 ring-amber-300 ring"
-                    )}
-                  >
-                    {task.focusWindow}
-                  </span>
-                </button>
+          {isTodayOpen ? (
+            todayEntries.length > 0 ? (
+              <div className="space-y-1 px-1 pb-2">
+                {todayEntries.map(({ task, index }) =>
+                  renderTaskRow(task, index)
+                )}
               </div>
-            );
-          })}
+            ) : (
+              <div className="px-4 pb-4 text-sm text-zinc-400">
+                Nothing lined up for today yet.
+              </div>
+            )
+          ) : null}
+        </div>
+
+        {hasNextUp ? (
+          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setIsNextUpOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between px-3 py-3 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <FiChevronDown
+                  className={cn(
+                    "h-4 w-4 text-zinc-500 transition-transform",
+                    isNextUpOpen ? "rotate-0" : "-rotate-90"
+                  )}
+                />
+
+                <p className="text-[17px] flex gap-1 font-display items-center font-semibold text-zinc-800">
+                  <span className="text-xl">⌛</span>{" "}
+                  <span className="pt-[5px]">Next Up</span>
+                </p>
+              </div>
+
+              <span className="rounded-md bg-zinc-100 p-1 px-2.5 flex items-center justify-center aspect-square text-sm font-medium text-zinc-900">
+                {nextUpEntries.length}
+              </span>
+            </button>
+
+            {isNextUpOpen ? (
+              <div className="space-y-1 px-1 pb-2">
+                {nextUpEntries.map(({ task, index }) =>
+                  renderTaskRow(task, index)
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </>
   );

@@ -1,5 +1,10 @@
-const CACHE_NAME = "shipit-shell-v1";
-const PRECACHE_URLS = ["/", "/manifest.webmanifest"];
+const CACHE_NAME = "shipit-shell-v2";
+const PRECACHE_URLS = [
+  "/",
+  "/manifest.webmanifest",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

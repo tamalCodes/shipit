@@ -112,6 +112,8 @@ type TaskModalState =
   | { mode: "create"; groupKey: TaskBoardGroup["key"] }
   | { mode: "edit"; groupKey: TaskBoardGroup["key"]; task: TaskModel };
 
+const MAX_TODAY_TASKS = 10;
+
 function TaskCreateForm({
   groupKey,
   showAssignee,
@@ -934,6 +936,7 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
 
     const handleTaskCreated = useCallback(
       (task: TaskModel, groupKey: TaskBoardGroup["key"]) => {
+        const removedTaskIds: string[] = [];
         let payload: Array<{
           groupKey: TaskBoardGroup["key"];
           tasks: Array<{ id: string; position: number }>;
@@ -951,10 +954,30 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
               ...task,
               position: 0,
             });
+
+            if (groupKey === "today") {
+              while (
+                targetGroup.tasks.length > MAX_TODAY_TASKS &&
+                targetGroup.tasks.some((item) => item.status === "done")
+              ) {
+                let removeIndex = -1;
+                for (let i = targetGroup.tasks.length - 1; i >= 0; i -= 1) {
+                  if (targetGroup.tasks[i].status === "done") {
+                    removeIndex = i;
+                    break;
+                  }
+                }
+                if (removeIndex === -1) break;
+                const [removed] = targetGroup.tasks.splice(removeIndex, 1);
+                removedTaskIds.push(removed.id);
+              }
+            }
+
             targetGroup.tasks = targetGroup.tasks.map((item, index) => ({
               ...item,
               position: index,
             }));
+
             const persisted = targetGroup.tasks
               .filter((item) => isPersistedTaskId(item.id))
               .map((item) => ({ id: item.id, position: item.position }));
@@ -971,6 +994,30 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
         }
 
         setModalState(null);
+
+        const persistedRemovedIds = removedTaskIds.filter((id) =>
+          isPersistedTaskId(id)
+        );
+
+        if (persistedRemovedIds.length > 0) {
+          void Promise.all(
+            persistedRemovedIds.map(async (id) => {
+              const response = await fetch(`/api/tasks/${id}`, {
+                method: "DELETE",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              });
+              if (!response.ok) {
+                console.error(
+                  "[TaskBoard] Failed to delete overflow task",
+                  id,
+                  response.status
+                );
+              }
+            })
+          );
+        }
       },
       [isPersistedTaskId, persistTaskOrder]
     );
@@ -1056,11 +1103,11 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
       [isPersistedTaskId, persistTaskOrder, modalState]
     );
 
-    const handleTaskDeleted = useCallback(
-      (taskId: string, groupKey: TaskBoardGroup["key"]) => {
-        let payload: Array<{
-          groupKey: TaskBoardGroup["key"];
-          tasks: Array<{ id: string; position: number }>;
+  const handleTaskDeleted = useCallback(
+    (taskId: string, groupKey: TaskBoardGroup["key"]) => {
+      let payload: Array<{
+        groupKey: TaskBoardGroup["key"];
+        tasks: Array<{ id: string; position: number }>;
         }> = [];
 
         setTaskGroups((previous) => {
@@ -1106,6 +1153,130 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
         openCreateTask: openCreateModal,
       }),
       [openCreateModal]
+    );
+
+    const handleTaskCompletedQuick = useCallback(
+      async (task: TaskModel, groupKey: TaskBoardGroup["key"]) => {
+        let rollbackState: ClientTaskGroup[] | null = null;
+        const removedTaskIds: string[] = [];
+        let reorderPayload: Array<{
+          groupKey: TaskBoardGroup["key"];
+          tasks: Array<{ id: string; position: number }>;
+        }> = [];
+
+        setTaskGroups((previous) => {
+          rollbackState = previous.map((group) => ({
+            ...group,
+            tasks: group.tasks.map((item) => ({ ...item })),
+          }));
+
+          const next = previous.map((group) => ({
+            ...group,
+            tasks: [...group.tasks],
+          }));
+
+          const targetGroup = next.find((group) => group.key === groupKey);
+          if (!targetGroup) {
+            return previous;
+          }
+
+          const index = targetGroup.tasks.findIndex(
+            (item) => item.id === task.id
+          );
+          if (index === -1) {
+            return previous;
+          }
+
+          targetGroup.tasks[index] = {
+            ...targetGroup.tasks[index],
+            status: "done",
+          };
+
+          if (groupKey === "today") {
+            while (
+              targetGroup.tasks.length > MAX_TODAY_TASKS &&
+              targetGroup.tasks.some((item) => item.status === "done")
+            ) {
+              let removeIndex = -1;
+              for (let i = targetGroup.tasks.length - 1; i >= 0; i -= 1) {
+                if (targetGroup.tasks[i].status === "done") {
+                  removeIndex = i;
+                  break;
+                }
+              }
+              if (removeIndex === -1) break;
+              const [removed] = targetGroup.tasks.splice(removeIndex, 1);
+              removedTaskIds.push(removed.id);
+            }
+          }
+
+          targetGroup.tasks = targetGroup.tasks.map((item, position) => ({
+            ...item,
+            position,
+          }));
+
+          const persisted = targetGroup.tasks
+            .filter((item) => isPersistedTaskId(item.id))
+            .map((item) => ({ id: item.id, position: item.position }));
+
+          if (persisted.length > 0) {
+            reorderPayload = [{ groupKey, tasks: persisted }];
+          }
+
+          return next;
+        });
+
+        if (!isPersistedTaskId(task.id)) {
+          return;
+        }
+
+        try {
+          const patchResponse = await fetch(`/api/tasks/${task.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ status: "done" }),
+          });
+
+          if (!patchResponse.ok) {
+            throw new Error(`Failed to mark task done: ${patchResponse.status}`);
+          }
+
+          if (reorderPayload.length > 0) {
+            void persistTaskOrder(reorderPayload);
+          }
+
+          const persistedRemovedIds = removedTaskIds.filter((id) =>
+            isPersistedTaskId(id)
+          );
+
+          if (persistedRemovedIds.length > 0) {
+            await Promise.all(
+              persistedRemovedIds.map(async (id) => {
+                const response = await fetch(`/api/tasks/${id}`, {
+                  method: "DELETE",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                });
+                if (!response.ok) {
+                  throw new Error(
+                    `Failed to delete completed task ${id}: ${response.status}`
+                  );
+                }
+              })
+            );
+          }
+        } catch (error) {
+          console.error("[TaskBoard] Unable to complete task", error);
+          if (rollbackState) {
+            setTaskGroups(rollbackState);
+          }
+          throw error;
+        }
+      },
+      [isPersistedTaskId, persistTaskOrder]
     );
 
     const closeModal = useCallback(() => {
@@ -1196,6 +1367,9 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
                   onDragEnd={handleDragEnd}
                   onTaskDrop={handleTaskDrop}
                   onTaskOpen={(task) => handleTaskOpen(group.key, task.id)}
+                  onTaskComplete={(task) =>
+                    handleTaskCompletedQuick(task, group.key)
+                  }
                 />
               </div>
             </div>

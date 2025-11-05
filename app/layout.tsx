@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title: "ShipIt",
   description: "Lightweight workspace for tracking ShipIt tasks anywhere.",
   manifest: "/manifest.webmanifest",
-  themeColor: "#171717",
+  themeColor: "#19191c",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
