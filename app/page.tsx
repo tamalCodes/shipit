@@ -1,58 +1,119 @@
-import Image from "next/image";
-import SignOutButton from "@/components/auth/SignOutButton";
+import { ObjectId } from "mongodb";
+import { cookies } from "next/headers";
 
-export default function Home() {
+import TasksView from "@/components/tasks/TasksView";
+import type { TaskBoardGroup } from "@/components/tasks/types";
+import { verifyAuthToken } from "@/lib/auth-server";
+import { getTasksCollection } from "@/lib/db";
+import { isGenericEmail } from "@/lib/email";
+import type { TaskDocument, TaskStatus } from "@/lib/schemas/task";
+
+const GROUP_META: Record<
+  TaskBoardGroup["key"],
+  { title: string; description: string }
+> = {
+  today: {
+    title: "Today",
+    description: "Finish what's on your plate before pulling new work.",
+  },
+  up_next: {
+    title: "Next Up",
+    description: "Keep them visible but stay focused.",
+  },
+};
+
+const allowedStatuses: TaskStatus[] = [
+  "todo",
+  "in_progress",
+  "blocked",
+  "done",
+];
+
+const EMPTY_GROUPS: TaskBoardGroup[] = (["today", "up_next"] as const).map(
+  (key) => ({
+    key,
+    title: GROUP_META[key].title,
+    description: GROUP_META[key].description,
+    tasks: [],
+  })
+);
+
+async function loadTaskGroups(
+  workspaceId: string | undefined
+): Promise<TaskBoardGroup[]> {
+  if (!workspaceId) {
+    return EMPTY_GROUPS;
+  }
+
+  let parsedWorkspaceId: ObjectId;
+  try {
+    parsedWorkspaceId = new ObjectId(workspaceId);
+  } catch {
+    return EMPTY_GROUPS;
+  }
+
+  const tasksCollection = await getTasksCollection<TaskDocument>();
+  const tasks = await tasksCollection
+    .find({ workspaceId: parsedWorkspaceId })
+    .sort({ groupKey: 1, position: 1, createdAt: 1 })
+    .limit(500)
+    .toArray();
+
+  if (tasks.length === 0) {
+    return EMPTY_GROUPS;
+  }
+
+  const grouped: Record<TaskBoardGroup["key"], TaskBoardGroup["tasks"]> = {
+    today: [],
+    up_next: [],
+  };
+
+  for (const task of tasks) {
+    if (task.groupKey !== "today" && task.groupKey !== "up_next") {
+      continue;
+    }
+
+    const status = allowedStatuses.includes(task.status) ? task.status : "todo";
+
+    grouped[task.groupKey].push({
+      id: task._id.toHexString(),
+      title: task.title,
+      status,
+      focusWindow: task.focusWindow,
+      assignedTo: task.assignedTo ?? null,
+      position:
+        typeof task.position === "number"
+          ? task.position
+          : grouped[task.groupKey].length,
+    });
+  }
+
+  return (["today", "up_next"] as const).map((key) => ({
+    key,
+    title: GROUP_META[key].title,
+    description: GROUP_META[key].description,
+    tasks: grouped[key].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
+  }));
+}
+
+export default async function HomePage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value ?? null;
+  const payload = token ? verifyAuthToken(token) : null;
+
+  const showAssignee =
+    payload?.email && !isGenericEmail(payload.email.trim().toLowerCase());
+
+  const taskGroups = await loadTaskGroups(payload?.sub);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans">
-      <main className="flex min-h-screen w-full max-w-4xl flex-col justify-between gap-16 bg-white px-6 py-12 sm:px-16">
-        <header className="flex w-full items-center justify-between gap-4">
-          <Image
-            src="/next.svg"
-            alt="Next.js logo"
-            width={100}
-            height={20}
-            priority
-          />
-          <SignOutButton />
-        </header>
-
-        <section className="flex flex-col items-start gap-6 text-left">
-          <h1 className="font-display max-w-2xl text-4xl font-semibold leading-tight tracking-tight text-zinc-950">
-            Ship faster with a minimal workspace crafted for modern product
-            teams.
-          </h1>
-          <p className="max-w-2xl text-lg leading-8 text-zinc-600">
-            You are authenticated. Explore deployments, manage access, and keep
-            your projects moving with a clean, focused interface. Ready to roll
-            out the next big update?
-          </p>
-        </section>
-
-        <footer className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] md:w-[180px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] md:w-[180px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </footer>
-      </main>
-    </div>
+    <main className="min-h-screen bg-zinc-100 py-10">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 sm:px-6">
+        <TasksView
+          initialGroups={taskGroups}
+          showAssignee={Boolean(showAssignee)}
+        />
+      </div>
+    </main>
   );
 }

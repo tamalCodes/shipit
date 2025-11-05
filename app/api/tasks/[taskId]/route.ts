@@ -113,7 +113,12 @@ export async function PATCH(
     }
 
     const taskObjectId = toObjectIdOrNull(rawTaskId);
-    const taskIdFilter = taskObjectId ?? rawTaskId;
+    if (!taskObjectId) {
+      return NextResponse.json(
+        { message: "Invalid task reference." },
+        { status: 400 }
+      );
+    }
 
     const body: UpdateTaskRequestBody = await request
       .json()
@@ -212,7 +217,7 @@ export async function PATCH(
 
     const tasksCollection = await getTasksCollection<TaskDocument>();
 
-    const existingTask = await tasksCollection.findOne({ _id: taskIdFilter });
+    const existingTask = await tasksCollection.findOne({ _id: taskObjectId });
 
     if (!existingTask) {
       return NextResponse.json(
@@ -253,7 +258,7 @@ export async function PATCH(
     }
 
     const updatedTask = await tasksCollection.findOneAndUpdate(
-      { _id: taskIdFilter },
+      { _id: taskObjectId },
       updateQuery,
       { returnDocument: "after", includeResultMetadata: false }
     );
@@ -310,10 +315,15 @@ export async function DELETE(
     }
 
     const taskObjectId = toObjectIdOrNull(rawTaskId);
-    const taskIdFilter = taskObjectId ?? rawTaskId;
+    if (!taskObjectId) {
+      return NextResponse.json(
+        { message: "Invalid task reference." },
+        { status: 400 }
+      );
+    }
 
     const tasksCollection = await getTasksCollection<TaskDocument>();
-    const existingTask = await tasksCollection.findOne({ _id: taskIdFilter });
+    const existingTask = await tasksCollection.findOne({ _id: taskObjectId });
 
     if (!existingTask) {
       return NextResponse.json(
@@ -340,7 +350,7 @@ export async function DELETE(
       );
     }
 
-    await tasksCollection.deleteOne({ _id: taskIdFilter });
+    await tasksCollection.deleteOne({ _id: taskObjectId });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

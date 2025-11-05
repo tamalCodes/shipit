@@ -5,7 +5,7 @@ import { createAuthToken, hashPassword } from "@/lib/auth-server";
 import { getUsersCollection } from "@/lib/db";
 
 type UserDocument = {
-  _id: ObjectId;
+  _id?: ObjectId;
   email: string;
   name: string;
   passwordHash: string;

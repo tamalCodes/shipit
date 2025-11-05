@@ -1,16 +1,21 @@
 import { createHash, randomBytes } from "crypto";
 
-import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { NextRequest, NextResponse } from "next/server";
 
-import {
-  getPasswordResetTokensCollection,
-  getUsersCollection,
-} from "@/lib/db";
+import { getPasswordResetTokensCollection, getUsersCollection } from "@/lib/db";
 
 type UserDocument = {
   _id: ObjectId;
   email: string;
+};
+
+type PasswordResetTokenDocument = {
+  _id?: ObjectId;
+  userId: ObjectId;
+  tokenHash: string;
+  expiresAt: Date;
+  createdAt: Date;
 };
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -31,6 +36,20 @@ function getTokenTtlMinutes(): number {
   }
 
   return parsed;
+}
+
+function toObjectIdOrNull(value: unknown): ObjectId | null {
+  if (value instanceof ObjectId) {
+    return value;
+  }
+  if (typeof value === "string") {
+    try {
+      return new ObjectId(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -62,27 +81,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    const tokens = await getPasswordResetTokensCollection<{
-      _id: ObjectId;
-      userId: ObjectId;
-      tokenHash: string;
-      expiresAt: Date;
-      createdAt: Date;
-    }>();
+    const userId = toObjectIdOrNull(user._id);
+    if (!userId) {
+      return NextResponse.json(
+        { message: "Account identifier is invalid." },
+        { status: 500 }
+      );
+    }
+
+    const tokens =
+      await getPasswordResetTokensCollection<PasswordResetTokenDocument>();
 
     await tokens.createIndex({ tokenHash: 1 }, { unique: true });
     await tokens.createIndex({ userId: 1 });
 
-    await tokens.deleteMany({ userId: user._id });
+    await tokens.deleteMany({ userId });
 
     const token = randomBytes(32).toString("hex");
     const tokenHash = createHash("sha256").update(token).digest("hex");
-    const expiresAt = new Date(
-      Date.now() + getTokenTtlMinutes() * 60 * 1000
-    );
+    const expiresAt = new Date(Date.now() + getTokenTtlMinutes() * 60 * 1000);
 
     await tokens.insertOne({
-      userId: user._id,
+      userId,
       tokenHash,
       expiresAt,
       createdAt: new Date(),

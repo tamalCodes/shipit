@@ -299,7 +299,7 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
 
       setAuthToken(response.token);
       dispatch({ type: "setStatus", status: "done" });
-      router.replace(redirectTo ?? "/dashboard");
+      router.replace(redirectTo ?? "/");
       router.refresh();
     } catch (error) {
       const message =
@@ -352,7 +352,7 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
 
       setAuthToken(response.token);
       dispatch({ type: "setStatus", status: "done" });
-      router.replace(redirectTo ?? "/dashboard");
+      router.replace(redirectTo ?? "/");
       router.refresh();
     } catch (error) {
       const message =
@@ -406,7 +406,7 @@ export default function AuthFlow({ redirectTo }: AuthFlowProps) {
     setGoogleLoading(true);
     setTimeout(() => {
       setAuthToken(createSessionToken("google"));
-      router.replace(redirectTo ?? "/dashboard");
+      router.replace(redirectTo ?? "/");
       router.refresh();
     }, 900);
   };

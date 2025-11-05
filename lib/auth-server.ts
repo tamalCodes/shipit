@@ -1,8 +1,10 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import ms from "ms";
+import type { StringValue } from "ms";
 
 const DEFAULT_SALT_ROUNDS = 12;
-const DEFAULT_JWT_EXPIRES_IN = "7d";
+const DEFAULT_JWT_EXPIRES_IN: StringValue = "7d";
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -52,8 +54,7 @@ export type TokenPayload = {
 };
 
 export function createAuthToken(payload: TokenPayload): string {
-  const expiresIn =
-    process.env.JWT_EXPIRES_IN?.trim() || DEFAULT_JWT_EXPIRES_IN;
+  const expiresIn = resolveJwtExpiresIn();
 
   return jwt.sign(payload, getJwtSecret(), { expiresIn });
 }
@@ -66,4 +67,32 @@ export function verifyAuthToken(token: string): TokenPayload | null {
     console.error("Failed to verify auth token", error);
     return null;
   }
+}
+
+function resolveJwtExpiresIn(): StringValue | number {
+  const raw = process.env.JWT_EXPIRES_IN?.trim();
+  if (!raw) {
+    return DEFAULT_JWT_EXPIRES_IN;
+  }
+
+  const numericValue = Number(raw);
+  if (Number.isFinite(numericValue) && numericValue > 0) {
+    return numericValue;
+  }
+
+  if (isMsStringValue(raw)) {
+    const parsed = ms(raw);
+    if (typeof parsed === "number" && parsed > 0) {
+      return raw;
+    }
+  }
+
+  throw new Error(
+    "Invalid JWT_EXPIRES_IN value. Use a positive integer of seconds or a duration string like '7d'."
+  );
+}
+
+function isMsStringValue(value: string): value is StringValue {
+  const trimmed = value.trim();
+  return /^\d+(\.\d+)?(\s*[a-zA-Z]+)?$/.test(trimmed);
 }

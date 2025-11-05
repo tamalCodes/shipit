@@ -206,7 +206,10 @@ export async function POST(request: NextRequest) {
       notes: normalizedNotes,
     };
 
-    const insertResult = await tasksCollection.insertOne({
+    const newTaskId = new ObjectId();
+
+    await tasksCollection.insertOne({
+      _id: newTaskId,
       ...taskInput,
       assignedTo: taskInput.assignedTo ?? null,
       notes: taskInput.notes,
@@ -215,7 +218,7 @@ export async function POST(request: NextRequest) {
     });
 
     const insertedTask: TaskDocument = {
-      _id: insertResult.insertedId,
+      _id: newTaskId,
       workspaceId,
       title: taskInput.title,
       status: taskInput.status,
