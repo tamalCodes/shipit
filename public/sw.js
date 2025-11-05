@@ -37,31 +37,28 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const url = new URL(request.url);
+  const isPrecachedAsset = PRECACHE_URLS.includes(url.pathname);
+
+  if (isPrecachedAsset) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => cachedResponse || fetch(request))
+    );
+    return;
+  }
+
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request, { cache: "no-store" }).catch(async () => {
+        const cache = await caches.open(CACHE_NAME);
+        return cache.match("/") ?? Response.error();
+      })
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(request)
-        .then((response) => {
-          if (
-            !response ||
-            response.status !== 200 ||
-            response.type !== "basic"
-          ) {
-            return response;
-          }
-
-          const responseClone = response.clone();
-          caches
-            .open(CACHE_NAME)
-            .then((cache) => cache.put(request, responseClone));
-
-          return response;
-        })
-        .catch(() => caches.match("/"));
-    })
+    fetch(request, { cache: "no-store" }).catch(() => caches.match(request))
   );
 });
 
