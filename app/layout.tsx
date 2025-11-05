@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import "./globals.css";
 
 const inter = Inter({
@@ -44,6 +46,8 @@ export default function RootLayout({
         className={`${inter.variable} ${bricolage.variable} ${inter.className} antialiased`}
       >
         {children}
+        <ServiceWorkerRegister />
+        <InstallPrompt />
       </body>
     </html>
   );
