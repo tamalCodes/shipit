@@ -1,4 +1,5 @@
-﻿/*
+﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+/*
   A light-weight drag and drop table used for prioritising tasks.
   Reorders items locally so users can focus on what comes next.
 */
@@ -296,7 +297,7 @@ export default function TaskTable({
                 {/* Title + pill */}
                 <button
                   type="button"
-                  onClick={(event) => handleTaskActivate(event, task)}
+                  onClick={(event) => handleTaskActivate(event as any, task)}
                   className="flex flex-1 items-center gap-2 text-left justify-between"
                 >
                   <span
