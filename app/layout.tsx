@@ -1,24 +1,19 @@
-import type { Metadata } from "next";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+import type { Metadata } from "next";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
+const outfit = Outfit({
   subsets: ["latin"],
-  variable: "--font-inter",
-});
-
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  variable: "--font-bricolage",
+  variable: "--font-outfit",
 });
 
 export const metadata: Metadata = {
   title: "ShipIt",
   description: "Lightweight workspace for tracking ShipIt tasks anywhere.",
   manifest: "/manifest.webmanifest",
-  themeColor: "#19191c",
+  themeColor: "#09090b",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -26,12 +21,35 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      {
+        url: "/icons/android-chrome-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: "/icons/android-chrome-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
+      {
+        url: "/icons/favicon-32x32.png",
+        sizes: "32x32",
+        type: "image/png",
+      },
+      {
+        url: "/icons/favicon-16x16.png",
+        sizes: "16x16",
+        type: "image/png",
+      },
     ],
     apple: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      {
+        url: "/icons/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
     ],
+    shortcut: [{ url: "/icons/favicon.ico" }],
   },
 };
 
@@ -42,9 +60,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${inter.variable} ${bricolage.variable} ${inter.className} antialiased`}
-      >
+      <body className={`${outfit.variable} ${outfit.className} antialiased`}>
         {children}
         <ServiceWorkerRegister />
         <InstallPrompt />

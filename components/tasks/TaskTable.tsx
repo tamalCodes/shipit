@@ -4,6 +4,7 @@
 */
 "use client";
 
+import { MAX_TODAY_TASKS } from "@/components/tasks/constants";
 import type {
   TaskBoardGroup,
   TaskModel,
@@ -11,6 +12,9 @@ import type {
 } from "@/components/tasks/types";
 import { type TaskStatus } from "@/lib/schemas/task";
 import { cn } from "@/lib/utils";
+import biceps from "@/public/biceps.svg";
+import eyes from "@/public/eyes.svg";
+import Image from "next/image";
 import type { DragEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiCheck, FiChevronDown, FiMoreVertical } from "react-icons/fi";
@@ -144,7 +148,12 @@ export default function TaskTable({
         throw error;
       }
     },
-    [clearCompletionOverride, onTaskStatusChange, revertCompletionOverride, setCompletionOverrideValue]
+    [
+      clearCompletionOverride,
+      onTaskStatusChange,
+      revertCompletionOverride,
+      setCompletionOverrideValue,
+    ]
   );
 
   const [isTodayOpen, setIsTodayOpen] = useState(true);
@@ -240,8 +249,8 @@ export default function TaskTable({
     [sortedTasks]
   );
 
-  const todayEntries = sortedEntries.slice(0, 10);
-  const nextUpEntries = sortedEntries.slice(10);
+  const todayEntries = sortedEntries.slice(0, MAX_TODAY_TASKS);
+  const nextUpEntries = sortedEntries.slice(MAX_TODAY_TASKS);
   const hasNextUp = nextUpEntries.length > 0;
 
   const renderTaskRow = (task: TaskModel, index: number) => {
@@ -268,10 +277,10 @@ export default function TaskTable({
           }
         }}
         className={cn(
-          "flex items-center gap-3 px-1 py-3 text-sm transition",
+          "flex items-center gap-2 py-3 text-sm transition",
           draggingTaskId === task.id
             ? "bg-zinc-100"
-            : "hover:bg-zinc-50 cursor-grab active:cursor-grabbing"
+            : " cursor-grab active:cursor-grabbing"
         )}
       >
         <button
@@ -306,10 +315,9 @@ export default function TaskTable({
         <div className="flex flex-1 min-w-0 items-center justify-between gap-3 overflow-hidden">
           <span
             className={cn(
-              "flex-1 min-w-0 truncate text-[18px] font-medium",
-              isDone ? "line-through text-zinc-400" : "text-zinc-700"
+              "flex-1 min-w-0 truncate text-[18px] font-normal",
+              isDone ? "line-through text-zinc-400" : "text-zinc-800"
             )}
-            title={task.title}
           >
             {task.title}
           </span>
@@ -318,7 +326,7 @@ export default function TaskTable({
             <span
               className={cn(
                 "ml-2 shrink-0 rounded-md border px-3 py-[5px] text-[15px] font-medium leading-none",
-                isDone && "opacity-30",
+                isDone && "opacity-50",
                 task.focusWindow === "Today"
                   ? "bg-rose-100 text-rose-600 border-rose-200"
                   : "bg-amber-50 text-amber-600 border-amber-200"
@@ -332,7 +340,7 @@ export default function TaskTable({
               aria-label="Task actions"
               className={cn(
                 "flex h-6 w-6 items-center justify-center text-zinc-400 transition hover:text-zinc-600",
-                isDone && "opacity-30"
+                isDone && "opacity-50"
               )}
               onClick={(event) => {
                 event.preventDefault();
@@ -391,32 +399,32 @@ export default function TaskTable({
         onDragOver={handleDragOver}
         onDrop={handleDropOnContainer}
       >
-        <div className="overflow-hidden rounded-2xl  bg-white/80">
+        <div className="overflow-hidden">
           <button
             type="button"
             onClick={() => setIsTodayOpen((prev) => !prev)}
-            className="flex w-full items-center justify-between px-3 py-3 text-left"
+            className="flex mb-4 w-full items-center  gap-3   py-3 text-left"
           >
             <div className="flex items-center gap-2">
               <FiChevronDown
                 className={cn(
-                  "h-4 w-4 text-zinc-500 transition-transform",
+                  "h-6 w-6 text-zinc-800 transition-transform",
                   isTodayOpen ? "rotate-0" : "-rotate-90"
                 )}
               />
-              <p className="text-[17px] flex gap-1 font-display items-center font-semibold text-zinc-800">
-                <span className="text-xl">💪</span>{" "}
-                <span className="pt-[5px]">Today</span>
+              <p className="text-[22px] flex gap-2 font-display items-center font-semibold text-zinc-700">
+                <Image src={biceps} alt="" className="w-6 h-6" />
+                <span className="pt-[5px]">Focusing On</span>
               </p>
             </div>
-            <span className="rounded-md bg-zinc-100 p-1 px-2.5 flex items-center justify-center aspect-square text-sm font-medium text-zinc-900">
+            {/* <span className="rounded-md mt-[5px] py-[3px] bg-zinc-200 px-2.5 flex items-center justify-center aspect-square text-xs font-medium text-zinc-900">
               {todayEntries.length}
-            </span>
+            </span> */}
           </button>
 
           {isTodayOpen ? (
             todayEntries.length > 0 ? (
-              <div className="space-y-1 px-1 pb-2">
+              <div className="space-y-1 pl-4 pr-2 bg-white rounded-[15px] py-2">
                 {todayEntries.map(({ task, index }) =>
                   renderTaskRow(task, index)
                 )}
@@ -430,37 +438,41 @@ export default function TaskTable({
         </div>
 
         {hasNextUp ? (
-          <div className="overflow-hidden rounded-2xl ">
+          <div className="overflow-hidden">
             <button
               type="button"
-              onClick={() => setIsNextUpOpen((prev) => !prev)}
-              className="flex w-full items-center justify-between px-3 py-3 text-left"
+              onClick={() => setIsTodayOpen((prev) => !prev)}
+              className="flex mb-4 w-full items-center  gap-3   py-3 text-left"
             >
               <div className="flex items-center gap-2">
                 <FiChevronDown
                   className={cn(
-                    "h-4 w-4 text-zinc-500 transition-transform",
-                    isNextUpOpen ? "rotate-0" : "-rotate-90"
+                    "h-6 w-6 text-zinc-800 transition-transform",
+                    isTodayOpen ? "rotate-0" : "-rotate-90"
                   )}
                 />
-
-                <p className="text-[17px] flex gap-1 font-display items-center font-semibold text-zinc-800">
-                  <span className="text-xl">⌛</span>{" "}
-                  <span className="pt-[5px]">Next Up</span>
+                <p className="text-[22px] flex gap-2 font-display items-center font-semibold text-zinc-700">
+                  <Image src={eyes} alt="" className="w-6 h-6" />
+                  <span className="pt-[5px]">Coming Up next</span>
                 </p>
               </div>
-
-              <span className="rounded-md bg-zinc-100 p-1 px-2.5 flex items-center justify-center aspect-square text-sm font-medium text-zinc-900">
-                {nextUpEntries.length}
-              </span>
+              {/* <span className="rounded-md mt-[5px] py-[3px] bg-zinc-200 px-2.5 flex items-center justify-center aspect-square text-xs font-medium text-zinc-900">
+              {todayEntries.length}
+            </span> */}
             </button>
 
             {isNextUpOpen ? (
-              <div className="space-y-1 px-1 pb-2">
-                {nextUpEntries.map(({ task, index }) =>
-                  renderTaskRow(task, index)
-                )}
-              </div>
+              todayEntries.length > 0 ? (
+                <div className="space-y-1 max-h-[310px] overflow-y-scroll pl-4 pr-2 bg-white rounded-[15px] py-2">
+                  {nextUpEntries.map(({ task, index }) =>
+                    renderTaskRow(task, index)
+                  )}
+                </div>
+              ) : (
+                <div className="px-4 pb-4 text-sm text-zinc-400">
+                  Nothing lined up for today yet.
+                </div>
+              )
             ) : null}
           </div>
         ) : null}

@@ -14,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { FiChevronDown, FiPlus, FiTrash2, FiX } from "react-icons/fi";
 
+import { MAX_TODAY_TASKS } from "@/components/tasks/constants";
 import TaskTable from "@/components/tasks/TaskTable";
 import type {
   TaskBoardGroup,
@@ -111,8 +112,6 @@ type TaskModalProps =
 type TaskModalState =
   | { mode: "create"; groupKey: TaskBoardGroup["key"] }
   | { mode: "edit"; groupKey: TaskBoardGroup["key"]; task: TaskModel };
-
-const MAX_TODAY_TASKS = 10;
 
 function TaskCreateForm({
   groupKey,
@@ -763,6 +762,8 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
           .sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
       }))
     );
+
+    console.log(taskGroups);
     const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
     const [modalState, setModalState] = useState<TaskModalState | null>(null);
 
@@ -1103,11 +1104,11 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
       [isPersistedTaskId, persistTaskOrder, modalState]
     );
 
-  const handleTaskDeleted = useCallback(
-    (taskId: string, groupKey: TaskBoardGroup["key"]) => {
-      let payload: Array<{
-        groupKey: TaskBoardGroup["key"];
-        tasks: Array<{ id: string; position: number }>;
+    const handleTaskDeleted = useCallback(
+      (taskId: string, groupKey: TaskBoardGroup["key"]) => {
+        let payload: Array<{
+          groupKey: TaskBoardGroup["key"];
+          tasks: Array<{ id: string; position: number }>;
         }> = [];
 
         setTaskGroups((previous) => {
@@ -1342,47 +1343,25 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
             </div>
           ) : null}
 
-          {taskGroups.map((group) => (
-            <div
-              key={group.key}
-              className={`${
-                group?.title === "Next Up" && "hidden"
-              } space-y-4 mb-12`}
-            >
-              <div className="space-y-1">
-                <h3
-                  className={` ${group?.title === "Today" && "hidden"}
-                   md:text-[18px] text-[28px] font-semibold font-display  tracking-wide md:text-zinc-700 text-zinc-900`}
-                >
-                  {group.title}
-                </h3>
+          {/* up_next, today */}
 
-                <p
-                  className={`text-sm text-zinc-500 ${
-                    group?.title === "Today" && "hidden"
-                  }`}
-                >
-                  {group.description}
-                </p>
-              </div>
-
-              <div className="overflow-hidden rounded-2xl md:border md:border-zinc-200 md:bg-white md:shadow-sm">
-                <TaskTable
-                  groupKey={group.key}
-                  tasks={group.tasks}
-                  showAssignee={showAssignee}
-                  draggingTaskId={draggingTaskId}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onTaskDrop={handleTaskDrop}
-                  onTaskOpen={(task) => handleTaskOpen(group.key, task.id)}
-                  onTaskStatusChange={(task, _index, nextStatus) =>
-                    handleTaskStatusQuickChange(task, group.key, nextStatus)
-                  }
-                />
-              </div>
+          <div className={` space-y-4 mb-12`}>
+            <div className="overflow-hidden">
+              <TaskTable
+                groupKey={"today"}
+                tasks={taskGroups[0]?.tasks}
+                showAssignee={showAssignee}
+                draggingTaskId={draggingTaskId}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onTaskDrop={handleTaskDrop}
+                onTaskOpen={(task) => handleTaskOpen("today", task.id)}
+                onTaskStatusChange={(task, _index, nextStatus) =>
+                  handleTaskStatusQuickChange(task, "today", nextStatus)
+                }
+              />
             </div>
-          ))}
+          </div>
         </section>
       </>
     );
