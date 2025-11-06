@@ -7,6 +7,7 @@ export type TaskModel = {
   focusWindow: string;
   position: number;
   assignedTo?: string | null;
+  groupKey: TaskGroupKey;
 };
 
 export type TaskBoardGroup = {

@@ -81,6 +81,7 @@ async function loadTaskGroups(
       status,
       focusWindow: task.focusWindow,
       assignedTo: task.assignedTo ?? null,
+      groupKey: task.groupKey,
       position:
         typeof task.position === "number"
           ? task.position

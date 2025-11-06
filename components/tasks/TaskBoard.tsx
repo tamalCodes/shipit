@@ -193,6 +193,7 @@ function TaskCreateForm({
         focusWindow: created.focusWindow,
         position: typeof created.position === "number" ? created.position : 0,
         assignedTo: created.assignedTo ?? null,
+        groupKey: created.groupKey,
       };
 
       onSuccess(newTask, created.groupKey);
@@ -420,6 +421,7 @@ const TaskEditForm = forwardRef<TaskEditFormHandle, TaskEditFormProps>(
               ? updated.position
               : task.position,
           assignedTo: updated.assignedTo ?? null,
+          groupKey: updated.groupKey,
         };
 
         onSuccess(updatedTask, updated.groupKey);
@@ -758,6 +760,7 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
             id: task.id ?? createTaskId(group.key, task.title),
             assignedTo: task.assignedTo ?? null,
             position: typeof task.position === "number" ? task.position : index,
+            groupKey: task.groupKey ?? group.key,
           }))
           .sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
       }))
@@ -883,10 +886,17 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
         insertionIndex = Math.max(0, insertionIndex);
         insertionIndex = Math.min(insertionIndex, targetGroup.tasks.length);
 
-        const focusAdjustedTask =
+        const focusAdjustedTask: TaskModel =
           targetGroupKey === "up_next"
-            ? { ...movedTask, focusWindow: "Coming up" }
-            : movedTask;
+            ? {
+                ...movedTask,
+                focusWindow: "Coming up",
+                groupKey: targetGroupKey,
+              }
+            : {
+                ...movedTask,
+                groupKey: targetGroupKey,
+              };
 
         targetGroup.tasks.splice(insertionIndex, 0, focusAdjustedTask);
 
@@ -953,6 +963,7 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
           if (targetGroup) {
             targetGroup.tasks.unshift({
               ...task,
+              groupKey,
               position: 0,
             });
 
@@ -1052,8 +1063,8 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
 
           const taskClone: TaskModel =
             updatedGroupKey === "up_next"
-              ? { ...task, focusWindow: "Coming up" }
-              : task;
+              ? { ...task, focusWindow: "Coming up", groupKey: updatedGroupKey }
+              : { ...task, groupKey: updatedGroupKey };
 
           if (originalGroup === targetGroup) {
             const index = originalGroup.tasks.findIndex(
@@ -1154,6 +1165,127 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
         openCreateTask: openCreateModal,
       }),
       [openCreateModal]
+    );
+
+    const handleTaskDemote = useCallback(
+      async (
+        task: TaskModel,
+        sourceGroupKey: TaskBoardGroup["key"] = "today"
+      ) => {
+        if (sourceGroupKey !== "today") {
+          return;
+        }
+
+        let rollbackState: ClientTaskGroup[] | null = null;
+        let reorderPayload: Array<{
+          groupKey: TaskBoardGroup["key"];
+          tasks: Array<{ id: string; position: number }>;
+        }> = [];
+
+        setTaskGroups((previous) => {
+          rollbackState = previous.map((group) => ({
+            ...group,
+            tasks: group.tasks.map((item) => ({ ...item })),
+          }));
+
+          const next = previous.map((group) => ({
+            ...group,
+            tasks: [...group.tasks],
+          }));
+
+          const todayGroup = next.find((group) => group.key === "today");
+          const upNextGroup = next.find((group) => group.key === "up_next");
+
+          if (!todayGroup || !upNextGroup) {
+            return previous;
+          }
+
+          const sourceIndex = todayGroup.tasks.findIndex(
+            (item) => item.id === task.id
+          );
+
+          if (sourceIndex === -1) {
+            return previous;
+          }
+
+          const [removedTask] = todayGroup.tasks.splice(sourceIndex, 1);
+          if (!removedTask) {
+            return previous;
+          }
+
+          const demotedTask: TaskModel = {
+            ...removedTask,
+            focusWindow: "Coming up",
+            groupKey: "up_next",
+          };
+
+          upNextGroup.tasks.unshift(demotedTask);
+
+          const affectedGroups = [todayGroup, upNextGroup];
+
+          reorderPayload = affectedGroups
+            .map((group) => {
+              group.tasks = group.tasks.map((item, position) => ({
+                ...item,
+                position,
+              }));
+
+              const persisted = group.tasks
+                .filter((item) => isPersistedTaskId(item.id))
+                .map((item) => ({ id: item.id, position: item.position }));
+
+              return persisted.length > 0
+                ? { groupKey: group.key, tasks: persisted }
+                : null;
+            })
+            .filter(
+              (entry): entry is { groupKey: TaskBoardGroup["key"]; tasks: Array<{ id: string; position: number }> } =>
+                entry !== null
+            );
+
+          return next;
+        });
+
+        const persistPromise =
+          reorderPayload.length > 0 ? persistTaskOrder(reorderPayload) : null;
+
+        if (!isPersistedTaskId(task.id)) {
+          if (persistPromise) {
+            void persistPromise;
+          }
+          return;
+        }
+
+        try {
+          const patchPromise = fetch(`/api/tasks/${task.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              groupKey: "up_next",
+              focusWindow: "Coming up",
+            }),
+          }).then((response) => {
+            if (!response.ok) {
+              throw new Error(
+                `Failed to update task group: ${response.status}`
+              );
+            }
+          });
+
+          await Promise.all([
+            patchPromise,
+            persistPromise ?? Promise.resolve(),
+          ]);
+        } catch (error) {
+          console.error("[TaskBoard] Unable to demote task", error);
+          if (rollbackState) {
+            setTaskGroups(rollbackState);
+          }
+        }
+      },
+      [isPersistedTaskId, persistTaskOrder]
     );
 
     const handleTaskStatusQuickChange = useCallback(
@@ -1269,7 +1401,8 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
                       "Content-Type": "application/json",
                     },
                   });
-                  if (!response.ok) {
+
+                  if (!response.ok && response.status !== 404) {
                     throw new Error(
                       `Failed to delete completed task ${id}: ${response.status}`
                     );
@@ -1304,6 +1437,9 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
       },
       [taskGroups]
     );
+
+    const todayGroup = taskGroups.find((group) => group.key === "today");
+    const upNextGroup = taskGroups.find((group) => group.key === "up_next");
 
     const modalProps: TaskModalProps | null = modalState
       ? modalState.mode === "create"
@@ -1348,16 +1484,21 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
           <div className={` space-y-4 mb-12`}>
             <div className="overflow-hidden">
               <TaskTable
-                groupKey={"today"}
-                tasks={taskGroups[0]?.tasks}
+                focusGroupKey="today"
+                nextGroupKey="up_next"
+                focusTasks={todayGroup?.tasks ?? []}
+                nextUpTasks={upNextGroup?.tasks ?? []}
                 showAssignee={showAssignee}
                 draggingTaskId={draggingTaskId}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 onTaskDrop={handleTaskDrop}
-                onTaskOpen={(task) => handleTaskOpen("today", task.id)}
-                onTaskStatusChange={(task, _index, nextStatus) =>
-                  handleTaskStatusQuickChange(task, "today", nextStatus)
+                onTaskOpen={(groupKey, task) => handleTaskOpen(groupKey, task.id)}
+                onTaskDemote={(task, groupKey) =>
+                  handleTaskDemote(task, groupKey)
+                }
+                onTaskStatusChange={(task, groupKey, _index, nextStatus) =>
+                  handleTaskStatusQuickChange(task, groupKey, nextStatus)
                 }
               />
             </div>

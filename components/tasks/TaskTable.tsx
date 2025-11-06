@@ -17,19 +17,31 @@ import eyes from "@/public/eyes.svg";
 import Image from "next/image";
 import type { DragEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiCheck, FiChevronDown, FiMoreVertical } from "react-icons/fi";
+import {
+  FiArrowDown,
+  FiCheck,
+  FiChevronDown,
+  FiMoreVertical,
+} from "react-icons/fi";
 
 type TaskTableProps = {
-  groupKey: TaskBoardGroup["key"];
-  tasks: TaskModel[];
+  focusGroupKey: TaskBoardGroup["key"];
+  nextGroupKey: TaskBoardGroup["key"];
+  focusTasks: TaskModel[];
+  nextUpTasks: TaskModel[];
   showAssignee: boolean;
   draggingTaskId: string | null;
   onDragStart: (taskId: string, index: number) => void;
   onDragEnd: () => void;
   onTaskDrop: (action: TaskTableDropAction) => void;
-  onTaskOpen: (task: TaskModel) => void;
+  onTaskOpen: (groupKey: TaskBoardGroup["key"], task: TaskModel) => void;
+  onTaskDemote?: (
+    task: TaskModel,
+    groupKey: TaskBoardGroup["key"]
+  ) => Promise<void> | void;
   onTaskStatusChange: (
     task: TaskModel,
+    groupKey: TaskBoardGroup["key"],
     index: number,
     nextStatus: TaskStatus
   ) => Promise<void> | void;
@@ -61,15 +73,24 @@ function readDragData(event: DragEventTarget) {
   }
 }
 
+type TableEntry = {
+  task: TaskModel;
+  index: number;
+  groupKey: TaskBoardGroup["key"];
+};
+
 export default function TaskTable({
-  groupKey,
-  tasks,
+  focusGroupKey,
+  nextGroupKey,
+  focusTasks,
+  nextUpTasks,
   showAssignee,
   draggingTaskId,
   onDragStart,
   onDragEnd,
   onTaskDrop,
   onTaskOpen,
+  onTaskDemote,
   onTaskStatusChange,
 }: TaskTableProps) {
   const [completionOverrides, setCompletionOverrides] = useState<
@@ -78,12 +99,12 @@ export default function TaskTable({
   const previousStatusRef = useRef<Record<string, TaskStatus>>({});
 
   useEffect(() => {
-    tasks.forEach((task) => {
+    [...focusTasks, ...nextUpTasks].forEach((task) => {
       if (task.status !== "done") {
         previousStatusRef.current[task.id] = task.status;
       }
     });
-  }, [tasks]);
+  }, [focusTasks, nextUpTasks]);
 
   const getIsDone = useCallback(
     (task: TaskModel) => completionOverrides[task.id] ?? task.status === "done",
@@ -120,7 +141,12 @@ export default function TaskTable({
   }, []);
 
   const applyTaskStatusChange = useCallback(
-    async (task: TaskModel, index: number, nextStatus: TaskStatus) => {
+    async (
+      task: TaskModel,
+      index: number,
+      nextStatus: TaskStatus,
+      groupKey: TaskBoardGroup["key"]
+    ) => {
       const shouldComplete = nextStatus === "done";
       if (shouldComplete) {
         if (task.status !== "done") {
@@ -137,7 +163,7 @@ export default function TaskTable({
       }
 
       try {
-        await onTaskStatusChange(task, index, nextStatus);
+        await onTaskStatusChange(task, groupKey, index, nextStatus);
         clearCompletionOverride(task.id);
         if (!shouldComplete) {
           previousStatusRef.current[task.id] = nextStatus;
@@ -160,19 +186,24 @@ export default function TaskTable({
   const [isNextUpOpen, setIsNextUpOpen] = useState(true);
 
   const handleDragStart = useCallback(
-    (event: DragEventTarget, taskId: string, index: number) => {
+    (
+      event: DragEventTarget,
+      taskId: string,
+      index: number,
+      sourceGroupKey: TaskBoardGroup["key"]
+    ) => {
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData(
         "application/json",
         JSON.stringify({
           taskId,
-          sourceGroupKey: groupKey,
+          sourceGroupKey,
           sourceIndex: index,
         })
       );
       onDragStart(taskId, index);
     },
-    [groupKey, onDragStart]
+    [onDragStart]
   );
 
   const handleDragOver = useCallback((event: DragEventTarget) => {
@@ -181,7 +212,11 @@ export default function TaskTable({
   }, []);
 
   const handleDropOnRow = useCallback(
-    (event: DragEventTarget, targetIndex: number) => {
+    (
+      event: DragEventTarget,
+      targetIndex: number,
+      targetGroupKey: TaskBoardGroup["key"]
+    ) => {
       event.preventDefault();
       event.stopPropagation();
       const payload = readDragData(event);
@@ -189,28 +224,31 @@ export default function TaskTable({
 
       onTaskDrop({
         ...payload,
-        targetGroupKey: groupKey,
+        targetGroupKey,
         targetIndex,
       });
       onDragEnd();
     },
-    [groupKey, onDragEnd, onTaskDrop]
+    [onDragEnd, onTaskDrop]
   );
 
   const handleDropOnContainer = useCallback(
-    (event: DragEventTarget) => {
+    (event: DragEventTarget, targetGroupKey: TaskBoardGroup["key"]) => {
       event.preventDefault();
       const payload = readDragData(event);
       if (!payload) return;
 
       onTaskDrop({
         ...payload,
-        targetGroupKey: groupKey,
-        targetIndex: tasks.length,
+        targetGroupKey,
+        targetIndex:
+          targetGroupKey === focusGroupKey
+            ? focusTasks.length
+            : nextUpTasks.length,
       });
       onDragEnd();
     },
-    [groupKey, onDragEnd, onTaskDrop, tasks.length]
+    [focusGroupKey, focusTasks.length, nextUpTasks.length, onDragEnd, onTaskDrop]
   );
 
   const handleTaskActivate = useCallback(
@@ -218,13 +256,14 @@ export default function TaskTable({
       event: MouseEvent<
         HTMLTableRowElement | HTMLDivElement | HTMLButtonElement
       >,
-      task: TaskModel
+      task: TaskModel,
+      groupKey: TaskBoardGroup["key"]
     ) => {
       event.preventDefault();
       if (draggingTaskId) {
         return;
       }
-      onTaskOpen(task);
+      onTaskOpen(groupKey, task);
     },
     [draggingTaskId, onTaskOpen]
   );
@@ -233,8 +272,8 @@ export default function TaskTable({
     onDragEnd();
   }, [onDragEnd]);
 
-  const sortedTasks = useMemo(() => {
-    return [...tasks].sort((a, b) => {
+  const sortedFocusTasks = useMemo(() => {
+    return [...focusTasks].sort((a, b) => {
       const aDone = getIsDone(a);
       const bDone = getIsDone(b);
       if (aDone !== bDone) {
@@ -242,27 +281,56 @@ export default function TaskTable({
       }
       return b.position - a.position;
     });
-  }, [getIsDone, tasks]);
+  }, [focusTasks, getIsDone]);
 
-  const sortedEntries = useMemo(
-    () => sortedTasks.map((task, index) => ({ task, index })),
-    [sortedTasks]
+  const sortedNextTasks = useMemo(() => {
+    return [...nextUpTasks].sort((a, b) => {
+      const aDone = getIsDone(a);
+      const bDone = getIsDone(b);
+      if (aDone !== bDone) {
+        return aDone ? 1 : -1;
+      }
+      return b.position - a.position;
+    });
+  }, [getIsDone, nextUpTasks]);
+
+  const focusEntries: TableEntry[] = useMemo(
+    () =>
+      sortedFocusTasks
+        .slice(0, MAX_TODAY_TASKS)
+        .map((task, index) => ({ task, index, groupKey: focusGroupKey })),
+    [focusGroupKey, sortedFocusTasks]
   );
 
-  const todayEntries = sortedEntries.slice(0, MAX_TODAY_TASKS);
-  const nextUpEntries = sortedEntries.slice(MAX_TODAY_TASKS);
+  const nextUpEntries: TableEntry[] = useMemo(
+    () =>
+      sortedNextTasks.map((task, index) => ({
+        task,
+        index,
+        groupKey: nextGroupKey,
+      })),
+    [nextGroupKey, sortedNextTasks]
+  );
+
   const hasNextUp = nextUpEntries.length > 0;
 
-  const renderTaskRow = (task: TaskModel, index: number) => {
+  const renderTaskRow = (
+    entry: TableEntry,
+    options: { enableDemote?: boolean } = {}
+  ) => {
+    const { task, index, groupKey } = entry;
     const isDone = getIsDone(task);
+    const isFocusSlot = options.enableDemote ?? false;
 
     return (
       <div
         key={task.id}
         draggable
-        onDragStart={(event) => handleDragStart(event, task.id, index)}
+        onDragStart={(event) =>
+          handleDragStart(event, task.id, index, groupKey)
+        }
         onDragOver={handleDragOver}
-        onDrop={(event) => handleDropOnRow(event, index)}
+        onDrop={(event) => handleDropOnRow(event, index, groupKey)}
         onDragEnd={handleDragEnd}
         onClick={async (event) => {
           event.preventDefault();
@@ -271,7 +339,7 @@ export default function TaskTable({
             ? previousStatusRef.current[task.id] ?? "todo"
             : "done";
           try {
-            await applyTaskStatusChange(task, index, nextStatus);
+            await applyTaskStatusChange(task, index, nextStatus, groupKey);
           } catch {
             // errors already logged in applyTaskStatusChange
           }
@@ -302,9 +370,11 @@ export default function TaskTable({
             const nextStatus: TaskStatus = isDone
               ? previousStatusRef.current[task.id] ?? "todo"
               : "done";
-            void applyTaskStatusChange(task, index, nextStatus).catch(() => {
-              // errors already handled in applyTaskStatusChange
-            });
+            void applyTaskStatusChange(task, index, nextStatus, groupKey).catch(
+              () => {
+                // errors already handled in applyTaskStatusChange
+              }
+            );
           }}
           onPointerDown={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
@@ -323,18 +393,43 @@ export default function TaskTable({
           </span>
 
           <div className="flex shrink-0 items-center gap-2 pl-2">
-            <span
-              className={cn(
-                "ml-2 shrink-0 rounded-md border px-3 py-[5px] text-[15px] font-medium leading-none",
-                isDone && "opacity-50",
-                task.focusWindow === "Today"
-                  ? "bg-rose-100 text-rose-600 border-rose-200"
-                  : "bg-amber-50 text-amber-600 border-amber-200"
-              )}
-              title={task.focusWindow}
-            >
-              {task.focusWindow}
-            </span>
+            {isFocusSlot && onTaskDemote ? (
+              <button
+                type="button"
+                aria-label="Move task to Coming Up next"
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full border border-black bg-black text-white transition hover:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-black/30",
+                  isDone && "opacity-50"
+                )}
+                title="Move to Coming Up next"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const result = onTaskDemote(task, groupKey);
+                  if (
+                    result &&
+                    typeof (result as Promise<unknown>).catch === "function"
+                  ) {
+                    void (result as Promise<unknown>).catch(() => undefined);
+                  }
+                }}
+              >
+                <FiArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            ) : (
+              <span
+                className={cn(
+                  "ml-2 shrink-0 rounded-md border px-3 py-[5px] text-[15px] font-medium leading-none",
+                  isDone && "opacity-50",
+                  task.focusWindow === "Today"
+                    ? "bg-rose-100 text-rose-600 border-rose-200"
+                    : "bg-amber-50 text-amber-600 border-amber-200"
+                )}
+                title={task.focusWindow}
+              >
+                {task.focusWindow}
+              </span>
+            )}
             <button
               type="button"
               aria-label="Task actions"
@@ -345,7 +440,7 @@ export default function TaskTable({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                handleTaskActivate(event, task);
+                handleTaskActivate(event, task, groupKey);
               }}
             >
               <FiMoreVertical className="h-4 w-4" />
@@ -356,13 +451,13 @@ export default function TaskTable({
     );
   };
 
-  if (tasks.length === 0) {
+  if (focusTasks.length === 0 && nextUpTasks.length === 0) {
     return (
       <>
         <div
           className="hidden min-h-[160px] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white/60 px-6 py-10 text-center text-sm text-zinc-500 md:flex"
           onDragOver={handleDragOver}
-          onDrop={handleDropOnContainer}
+          onDrop={(event) => handleDropOnContainer(event, focusGroupKey)}
         >
           <div className="space-y-2">
             <p className="font-medium text-zinc-600">
@@ -377,7 +472,7 @@ export default function TaskTable({
         <div
           className="flex min-h-[140px] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-white/70 px-5 py-8 text-center text-sm text-zinc-500 md:hidden"
           onDragOver={handleDragOver}
-          onDrop={handleDropOnContainer}
+          onDrop={(event) => handleDropOnContainer(event, focusGroupKey)}
         >
           <div className="space-y-2">
             <p className="font-medium text-zinc-600">
@@ -394,11 +489,7 @@ export default function TaskTable({
 
   return (
     <>
-      <div
-        className="space-y-4"
-        onDragOver={handleDragOver}
-        onDrop={handleDropOnContainer}
-      >
+      <div className="space-y-4">
         <div className="overflow-hidden">
           <button
             type="button"
@@ -418,15 +509,19 @@ export default function TaskTable({
               </p>
             </div>
             {/* <span className="rounded-md mt-[5px] py-[3px] bg-zinc-200 px-2.5 flex items-center justify-center aspect-square text-xs font-medium text-zinc-900">
-              {todayEntries.length}
+              {focusEntries.length}
             </span> */}
           </button>
 
           {isTodayOpen ? (
-            todayEntries.length > 0 ? (
-              <div className="space-y-1 pl-4 pr-2 bg-white rounded-[15px] py-2">
-                {todayEntries.map(({ task, index }) =>
-                  renderTaskRow(task, index)
+            focusEntries.length > 0 ? (
+              <div
+                className="space-y-1 pl-4 pr-2 bg-white rounded-[15px] py-2"
+                onDragOver={handleDragOver}
+                onDrop={(event) => handleDropOnRow(event, focusEntries.length, focusGroupKey)}
+              >
+                {focusEntries.map((entry) =>
+                  renderTaskRow(entry, { enableDemote: true })
                 )}
               </div>
             ) : (
@@ -441,14 +536,14 @@ export default function TaskTable({
           <div className="overflow-hidden">
             <button
               type="button"
-              onClick={() => setIsTodayOpen((prev) => !prev)}
+              onClick={() => setIsNextUpOpen((prev) => !prev)}
               className="flex mb-4 w-full items-center  gap-3   py-3 text-left"
             >
               <div className="flex items-center gap-2">
                 <FiChevronDown
                   className={cn(
                     "h-6 w-6 text-zinc-800 transition-transform",
-                    isTodayOpen ? "rotate-0" : "-rotate-90"
+                    isNextUpOpen ? "rotate-0" : "-rotate-90"
                   )}
                 />
                 <p className="text-[22px] flex gap-2 font-display items-center font-semibold text-zinc-700">
@@ -457,20 +552,24 @@ export default function TaskTable({
                 </p>
               </div>
               {/* <span className="rounded-md mt-[5px] py-[3px] bg-zinc-200 px-2.5 flex items-center justify-center aspect-square text-xs font-medium text-zinc-900">
-              {todayEntries.length}
+              {nextUpEntries.length}
             </span> */}
             </button>
 
             {isNextUpOpen ? (
-              todayEntries.length > 0 ? (
-                <div className="space-y-1 max-h-[310px] overflow-y-scroll pl-4 pr-2 bg-white rounded-[15px] py-2">
-                  {nextUpEntries.map(({ task, index }) =>
-                    renderTaskRow(task, index)
-                  )}
+              hasNextUp ? (
+                <div
+                  className="space-y-1 max-h-[310px] overflow-y-scroll pl-4 pr-2 bg-white rounded-[15px] py-2"
+                  onDragOver={handleDragOver}
+                  onDrop={(event) =>
+                    handleDropOnRow(event, nextUpEntries.length, nextGroupKey)
+                  }
+                >
+                  {nextUpEntries.map((entry) => renderTaskRow(entry))}
                 </div>
               ) : (
                 <div className="px-4 pb-4 text-sm text-zinc-400">
-                  Nothing lined up for today yet.
+                  Nothing queued for later yet.
                 </div>
               )
             ) : null}
