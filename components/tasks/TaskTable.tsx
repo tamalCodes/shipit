@@ -9,12 +9,11 @@ import type {
   TaskModel,
   TaskTableDropAction,
 } from "@/components/tasks/types";
-import { TASK_STATUS_LABELS, type TaskStatus } from "@/lib/schemas/task";
+import { type TaskStatus } from "@/lib/schemas/task";
 import { cn } from "@/lib/utils";
 import type { DragEvent, MouseEvent } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiCheck, FiChevronDown, FiMoreVertical } from "react-icons/fi";
-import { RiDraggable } from "react-icons/ri";
 
 type TaskTableProps = {
   groupKey: TaskBoardGroup["key"];
@@ -25,7 +24,11 @@ type TaskTableProps = {
   onDragEnd: () => void;
   onTaskDrop: (action: TaskTableDropAction) => void;
   onTaskOpen: (task: TaskModel) => void;
-  onTaskComplete: (task: TaskModel, index: number) => Promise<void> | void;
+  onTaskStatusChange: (
+    task: TaskModel,
+    index: number,
+    nextStatus: TaskStatus
+  ) => Promise<void> | void;
 };
 
 const statusAccent: Record<TaskStatus, string> = {
@@ -63,23 +66,35 @@ export default function TaskTable({
   onDragEnd,
   onTaskDrop,
   onTaskOpen,
-  onTaskComplete,
+  onTaskStatusChange,
 }: TaskTableProps) {
   const [completionOverrides, setCompletionOverrides] = useState<
     Partial<Record<string, boolean>>
   >({});
+  const previousStatusRef = useRef<Record<string, TaskStatus>>({});
+
+  useEffect(() => {
+    tasks.forEach((task) => {
+      if (task.status !== "done") {
+        previousStatusRef.current[task.id] = task.status;
+      }
+    });
+  }, [tasks]);
 
   const getIsDone = useCallback(
     (task: TaskModel) => completionOverrides[task.id] ?? task.status === "done",
     [completionOverrides]
   );
 
-  const markCompleteOptimistically = useCallback((taskId: string) => {
-    setCompletionOverrides((prev) => ({
-      ...prev,
-      [taskId]: true,
-    }));
-  }, []);
+  const setCompletionOverrideValue = useCallback(
+    (taskId: string, value: boolean) => {
+      setCompletionOverrides((prev) => ({
+        ...prev,
+        [taskId]: value,
+      }));
+    },
+    []
+  );
 
   const clearCompletionOverride = useCallback((taskId: string) => {
     setCompletionOverrides((prev) => {
@@ -99,6 +114,38 @@ export default function TaskTable({
       return next;
     });
   }, []);
+
+  const applyTaskStatusChange = useCallback(
+    async (task: TaskModel, index: number, nextStatus: TaskStatus) => {
+      const shouldComplete = nextStatus === "done";
+      if (shouldComplete) {
+        if (task.status !== "done") {
+          previousStatusRef.current[task.id] = task.status;
+        } else if (!previousStatusRef.current[task.id]) {
+          previousStatusRef.current[task.id] = "todo";
+        }
+        setCompletionOverrideValue(task.id, true);
+      } else {
+        if (!previousStatusRef.current[task.id]) {
+          previousStatusRef.current[task.id] = nextStatus;
+        }
+        setCompletionOverrideValue(task.id, false);
+      }
+
+      try {
+        await onTaskStatusChange(task, index, nextStatus);
+        clearCompletionOverride(task.id);
+        if (!shouldComplete) {
+          previousStatusRef.current[task.id] = nextStatus;
+        }
+      } catch (error) {
+        console.error("Failed to update task status", error);
+        revertCompletionOverride(task.id);
+        throw error;
+      }
+    },
+    [clearCompletionOverride, onTaskStatusChange, revertCompletionOverride, setCompletionOverrideValue]
+  );
 
   const [isTodayOpen, setIsTodayOpen] = useState(true);
   const [isNextUpOpen, setIsNextUpOpen] = useState(true);
@@ -210,14 +257,14 @@ export default function TaskTable({
         onDragEnd={handleDragEnd}
         onClick={async (event) => {
           event.preventDefault();
-          if (draggingTaskId || isDone) return;
-          markCompleteOptimistically(task.id);
+          if (draggingTaskId) return;
+          const nextStatus: TaskStatus = isDone
+            ? previousStatusRef.current[task.id] ?? "todo"
+            : "done";
           try {
-            await onTaskComplete(task, index);
-            clearCompletionOverride(task.id);
-          } catch (error) {
-            console.error("Failed to complete task", error);
-            revertCompletionOverride(task.id);
+            await applyTaskStatusChange(task, index, nextStatus);
+          } catch {
+            // errors already logged in applyTaskStatusChange
           }
         }}
         className={cn(
@@ -243,16 +290,12 @@ export default function TaskTable({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            if (isDone) return;
-            markCompleteOptimistically(task.id);
-            void Promise.resolve(onTaskComplete(task, index))
-              .then(() => {
-                clearCompletionOverride(task.id);
-              })
-              .catch((error) => {
-                console.error("Failed to complete task", error);
-                revertCompletionOverride(task.id);
-              });
+            const nextStatus: TaskStatus = isDone
+              ? previousStatusRef.current[task.id] ?? "todo"
+              : "done";
+            void applyTaskStatusChange(task, index, nextStatus).catch(() => {
+              // errors already handled in applyTaskStatusChange
+            });
           }}
           onPointerDown={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
@@ -343,89 +386,12 @@ export default function TaskTable({
 
   return (
     <>
-      <div className="hidden md:block">
-        <div className="overflow-x-auto">
-          <table className="min-w-full table-fixed border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-zinc-200 text-xs uppercase tracking-wide text-zinc-400">
-                <th className=" px-5 py-3 font-medium text-zinc-500 md:w-1/2">
-                  Task
-                </th>
-                <th className="px-5 py-3 font-medium text-zinc-500 md:w-1/3">
-                  Focus window
-                </th>
-                <th className="px-5 py-3 font-medium text-zinc-500 md:w-36">
-                  Status
-                </th>
-                {showAssignee ? (
-                  <th className="px-5 py-3 font-medium text-zinc-500 md:w-48">
-                    Assigned to
-                  </th>
-                ) : null}
-              </tr>
-            </thead>
-            <tbody onDragOver={handleDragOver} onDrop={handleDropOnContainer}>
-              {tasks.map((task, index) => (
-                <tr
-                  key={task.id}
-                  draggable
-                  onDragStart={(event) =>
-                    handleDragStart(event, task.id, index)
-                  }
-                  onDragOver={handleDragOver}
-                  onDrop={(event) => handleDropOnRow(event, index)}
-                  onDragEnd={handleDragEnd}
-                  onClick={(event) => handleTaskActivate(event, task)}
-                  className={cn(
-                    "border-b border-zinc-100 last:border-b-0",
-                    draggingTaskId === task.id
-                      ? "bg-zinc-100"
-                      : "hover:bg-zinc-50 cursor-grab active:cursor-grabbing"
-                  )}
-                >
-                  <td className="px-5 py-4 align-top">
-                    <div className="flex items-start gap-3">
-                      <RiDraggable
-                        className="mt-1 h-4 w-4 flex-shrink-0 text-zinc-300"
-                        aria-hidden="true"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-zinc-900">
-                          {task.title}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 align-top text-sm text-zinc-600">
-                    {task.focusWindow}
-                  </td>
-                  <td className="px-5 py-4 align-top">
-                    <span
-                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
-                        statusAccent[task.status]
-                      }`}
-                    >
-                      {TASK_STATUS_LABELS[task.status]}
-                    </span>
-                  </td>
-                  {showAssignee ? (
-                    <td className="px-5 py-4 align-top text-sm font-medium text-zinc-700">
-                      {task.assignedTo ?? "Unassigned"}
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       <div
-        className="md:hidden space-y-4"
+        className="space-y-4"
         onDragOver={handleDragOver}
         onDrop={handleDropOnContainer}
       >
-        <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 shadow-sm">
+        <div className="overflow-hidden rounded-2xl  bg-white/80">
           <button
             type="button"
             onClick={() => setIsTodayOpen((prev) => !prev)}
@@ -464,7 +430,7 @@ export default function TaskTable({
         </div>
 
         {hasNextUp ? (
-          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white/80 shadow-sm">
+          <div className="overflow-hidden rounded-2xl ">
             <button
               type="button"
               onClick={() => setIsNextUpOpen((prev) => !prev)}

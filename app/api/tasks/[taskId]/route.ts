@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { type Filter, ObjectId } from "mongodb";
 import { NextRequest, NextResponse } from "next/server";
 
 import { verifyAuthToken } from "@/lib/auth-server";
@@ -65,17 +65,6 @@ function toObjectIdOrNull(value: string | undefined | null) {
   } catch {
     return null;
   }
-}
-
-function normalizeIdToString(value: unknown): string | null {
-  if (value == null) return null;
-  if (value instanceof ObjectId) {
-    return value.toHexString();
-  }
-  if (typeof value === "string") {
-    return value.trim();
-  }
-  return null;
 }
 
 export async function PATCH(
@@ -217,33 +206,6 @@ export async function PATCH(
 
     const tasksCollection = await getTasksCollection<TaskDocument>();
 
-    const existingTask = await tasksCollection.findOne({ _id: taskObjectId });
-
-    if (!existingTask) {
-      return NextResponse.json(
-        { message: "Task not found." },
-        { status: 404 }
-      );
-    }
-
-    const existingWorkspaceId = normalizeIdToString(
-      existingTask.workspaceId
-    );
-
-    if (!existingWorkspaceId) {
-      return NextResponse.json(
-        { message: "Task reference is corrupted." },
-        { status: 500 }
-      );
-    }
-
-    if (existingWorkspaceId !== workspaceIdString) {
-      return NextResponse.json(
-        { message: "You do not have access to update this task." },
-        { status: 403 }
-      );
-    }
-
     updateSet.updatedAt = new Date();
 
     const updateQuery: {
@@ -257,16 +219,23 @@ export async function PATCH(
       updateQuery.$unset = updateUnset;
     }
 
+    const taskFilter: Filter<TaskDocument> = {
+      _id: taskObjectId,
+      ...(workspaceObjectId != null
+        ? { workspaceId: workspaceObjectId }
+        : { workspaceId: (workspaceIdString as unknown) as ObjectId }),
+    };
+
     const updatedTask = await tasksCollection.findOneAndUpdate(
-      { _id: taskObjectId },
+      taskFilter,
       updateQuery,
       { returnDocument: "after", includeResultMetadata: false }
     );
 
     if (!updatedTask) {
       return NextResponse.json(
-        { message: "Unable to update the task right now." },
-        { status: 500 }
+        { message: "Task not found." },
+        { status: 404 }
       );
     }
 
@@ -323,34 +292,21 @@ export async function DELETE(
     }
 
     const tasksCollection = await getTasksCollection<TaskDocument>();
-    const existingTask = await tasksCollection.findOne({ _id: taskObjectId });
+    const deleteFilter: Filter<TaskDocument> = {
+      _id: taskObjectId,
+      ...(workspaceObjectId != null
+        ? { workspaceId: workspaceObjectId }
+        : { workspaceId: (workspaceIdString as unknown) as ObjectId }),
+    };
 
-    if (!existingTask) {
+    const deleteResult = await tasksCollection.deleteOne(deleteFilter);
+
+    if (deleteResult.deletedCount === 0) {
       return NextResponse.json(
         { message: "Task not found." },
         { status: 404 }
       );
     }
-
-    const existingWorkspaceId = normalizeIdToString(
-      existingTask.workspaceId
-    );
-
-    if (!existingWorkspaceId) {
-      return NextResponse.json(
-        { message: "Task reference is corrupted." },
-        { status: 500 }
-      );
-    }
-
-    if (existingWorkspaceId !== workspaceIdString) {
-      return NextResponse.json(
-        { message: "You do not have access to delete this task." },
-        { status: 403 }
-      );
-    }
-
-    await tasksCollection.deleteOne({ _id: taskObjectId });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

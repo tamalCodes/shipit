@@ -1155,14 +1155,19 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
       [openCreateModal]
     );
 
-    const handleTaskCompletedQuick = useCallback(
-      async (task: TaskModel, groupKey: TaskBoardGroup["key"]) => {
+    const handleTaskStatusQuickChange = useCallback(
+      async (
+        task: TaskModel,
+        groupKey: TaskBoardGroup["key"],
+        nextStatus: TaskStatus
+      ) => {
         let rollbackState: ClientTaskGroup[] | null = null;
         const removedTaskIds: string[] = [];
         let reorderPayload: Array<{
           groupKey: TaskBoardGroup["key"];
           tasks: Array<{ id: string; position: number }>;
         }> = [];
+        const isCompleting = nextStatus === "done";
 
         setTaskGroups((previous) => {
           rollbackState = previous.map((group) => ({
@@ -1189,10 +1194,10 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
 
           targetGroup.tasks[index] = {
             ...targetGroup.tasks[index],
-            status: "done",
+            status: nextStatus,
           };
 
-          if (groupKey === "today") {
+          if (groupKey === "today" && isCompleting) {
             while (
               targetGroup.tasks.length > MAX_TODAY_TASKS &&
               targetGroup.tasks.some((item) => item.status === "done")
@@ -1236,40 +1241,44 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ status: "done" }),
+            body: JSON.stringify({ status: nextStatus }),
           });
 
           if (!patchResponse.ok) {
-            throw new Error(`Failed to mark task done: ${patchResponse.status}`);
+            throw new Error(
+              `Failed to update task status: ${patchResponse.status}`
+            );
           }
 
           if (reorderPayload.length > 0) {
             void persistTaskOrder(reorderPayload);
           }
 
-          const persistedRemovedIds = removedTaskIds.filter((id) =>
-            isPersistedTaskId(id)
-          );
-
-          if (persistedRemovedIds.length > 0) {
-            await Promise.all(
-              persistedRemovedIds.map(async (id) => {
-                const response = await fetch(`/api/tasks/${id}`, {
-                  method: "DELETE",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                });
-                if (!response.ok) {
-                  throw new Error(
-                    `Failed to delete completed task ${id}: ${response.status}`
-                  );
-                }
-              })
+          if (isCompleting) {
+            const persistedRemovedIds = removedTaskIds.filter((id) =>
+              isPersistedTaskId(id)
             );
+
+            if (persistedRemovedIds.length > 0) {
+              await Promise.all(
+                persistedRemovedIds.map(async (id) => {
+                  const response = await fetch(`/api/tasks/${id}`, {
+                    method: "DELETE",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                  });
+                  if (!response.ok) {
+                    throw new Error(
+                      `Failed to delete completed task ${id}: ${response.status}`
+                    );
+                  }
+                })
+              );
+            }
           }
         } catch (error) {
-          console.error("[TaskBoard] Unable to complete task", error);
+          console.error("[TaskBoard] Unable to update task status", error);
           if (rollbackState) {
             setTaskGroups(rollbackState);
           }
@@ -1367,8 +1376,8 @@ const TaskBoard = forwardRef<TaskBoardHandle, TaskBoardProps>(
                   onDragEnd={handleDragEnd}
                   onTaskDrop={handleTaskDrop}
                   onTaskOpen={(task) => handleTaskOpen(group.key, task.id)}
-                  onTaskComplete={(task) =>
-                    handleTaskCompletedQuick(task, group.key)
+                  onTaskStatusChange={(task, _index, nextStatus) =>
+                    handleTaskStatusQuickChange(task, group.key, nextStatus)
                   }
                 />
               </div>

@@ -24,14 +24,10 @@ function getClientPromise(): Promise<MongoClient> {
     _mongoClientPromise?: Promise<MongoClient>;
   };
 
-  if (process.env.NODE_ENV === "development") {
-    if (!globalForMongo._mongoClientPromise) {
-      globalForMongo._mongoClientPromise = createClient().connect();
-    }
-    return globalForMongo._mongoClientPromise;
+  if (!globalForMongo._mongoClientPromise) {
+    globalForMongo._mongoClientPromise = createClient().connect();
   }
-
-  return createClient().connect();
+  return globalForMongo._mongoClientPromise;
 }
 
 export async function getDb(): Promise<Db> {
